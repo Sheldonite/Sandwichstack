@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store">
+  <title>Sandwich Stack</title>
+  <link rel="stylesheet" href="styles.css?v=polish-15">
+</head>
+<body>
+  <main class="game-shell">
+    <section class="hud" aria-label="Game status">
+      <div>
+        <span class="label">Score</span>
+        <strong id="score">0</strong>
+      </div>
+      <div>
+        <span class="label">Stack</span>
+        <strong id="stackCount">0</strong>
+      </div>
+      <div>
+        <span class="label">Lives</span>
+        <strong id="lives">3</strong>
+      </div>
+      <div>
+        <span class="label">Combo</span>
+        <strong id="combo">0x</strong>
+      </div>
+      <div>
+        <span class="label">Best</span>
+        <strong id="highScore">0</strong>
+      </div>
+      <div>
+        <span class="label">Power</span>
+        <strong id="powerStatus">None</strong>
+      </div>
+      <button id="pauseButton" class="icon-button" type="button" aria-label="Pause game" title="Pause game">II</button>
+      <button id="soundToggle" class="icon-button" type="button" aria-label="Toggle sound" title="Toggle sound">SFX</button>
+    </section>
+
+    <canvas id="game" width="960" height="640" aria-label="Sandwich Stack game"></canvas>
+
+    <section id="overlay" class="overlay">
+      <div class="overlay-panel">
+        <h1>Sandwich Stack</h1>
+        <p id="overlayText">Catch sandwich fixings. Dodge the spoiled stuff. Build the tallest lunch you can.</p>
+        <button id="startButton" type="button">Start</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="game.js?v=polish-15"></script>
+</body>
+</html>
