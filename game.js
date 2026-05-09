@@ -18,6 +18,7 @@ let phoneLayout = false;
 setCanvasSizeForViewport();
 
 const keys = new Set();
+const DEBUG_MODE = new URLSearchParams(window.location.search).has("debug");
 const MAX_DROPS = 18;
 const FOOD_SCALE = 0.72;
 const STACK_STEP = 7;
@@ -99,7 +100,82 @@ const volcanoAnimationImages = loadNamedImages({
   smoke: "assets/volcano/smoke-flow-36-premium-spritesheet.png",
   eruption: "assets/volcano/eruption-36-premium-spritesheet.png"
 });
-const volcanoFrameBounds = new WeakMap();
+const VOLCANO_SMOKE_FRAME_BOUNDS = [
+  { left: 48, right: 368, top: 108, bottom: 752 },
+  { left: 48, right: 368, top: 108, bottom: 752 },
+  { left: 48, right: 368, top: 108, bottom: 752 },
+  { left: 48, right: 366, top: 108, bottom: 750 },
+  { left: 50, right: 366, top: 108, bottom: 750 },
+  { left: 50, right: 364, top: 108, bottom: 750 },
+  { left: 50, right: 364, top: 108, bottom: 750 },
+  { left: 52, right: 364, top: 108, bottom: 750 },
+  { left: 52, right: 362, top: 108, bottom: 750 },
+  { left: 52, right: 362, top: 108, bottom: 748 },
+  { left: 52, right: 364, top: 108, bottom: 748 },
+  { left: 52, right: 364, top: 108, bottom: 748 },
+  { left: 52, right: 364, top: 108, bottom: 748 },
+  { left: 52, right: 366, top: 108, bottom: 748 },
+  { left: 52, right: 366, top: 108, bottom: 748 },
+  { left: 52, right: 368, top: 108, bottom: 748 },
+  { left: 52, right: 370, top: 108, bottom: 746 },
+  { left: 52, right: 370, top: 108, bottom: 746 },
+  { left: 54, right: 370, top: 108, bottom: 746 },
+  { left: 54, right: 370, top: 108, bottom: 746 },
+  { left: 54, right: 370, top: 108, bottom: 746 },
+  { left: 56, right: 370, top: 108, bottom: 746 },
+  { left: 56, right: 368, top: 108, bottom: 746 },
+  { left: 56, right: 368, top: 108, bottom: 746 },
+  { left: 56, right: 368, top: 108, bottom: 748 },
+  { left: 58, right: 366, top: 108, bottom: 748 },
+  { left: 58, right: 366, top: 108, bottom: 748 },
+  { left: 56, right: 366, top: 108, bottom: 748 },
+  { left: 56, right: 366, top: 108, bottom: 748 },
+  { left: 54, right: 366, top: 108, bottom: 748 },
+  { left: 52, right: 368, top: 108, bottom: 748 },
+  { left: 50, right: 368, top: 108, bottom: 750 },
+  { left: 50, right: 368, top: 108, bottom: 750 },
+  { left: 48, right: 370, top: 108, bottom: 750 },
+  { left: 46, right: 370, top: 108, bottom: 750 },
+  { left: 48, right: 368, top: 108, bottom: 750 }
+];
+const VOLCANO_ERUPTION_FRAME_BOUNDS = [
+  { left: 48, right: 408, top: 92, bottom: 756 },
+  { left: 48, right: 406, top: 90, bottom: 756 },
+  { left: 48, right: 404, top: 86, bottom: 756 },
+  { left: 48, right: 404, top: 84, bottom: 754 },
+  { left: 46, right: 408, top: 82, bottom: 754 },
+  { left: 44, right: 412, top: 80, bottom: 752 },
+  { left: 44, right: 414, top: 82, bottom: 750 },
+  { left: 46, right: 418, top: 82, bottom: 750 },
+  { left: 46, right: 418, top: 84, bottom: 750 },
+  { left: 48, right: 418, top: 88, bottom: 748 },
+  { left: 50, right: 418, top: 90, bottom: 748 },
+  { left: 50, right: 418, top: 94, bottom: 748 },
+  { left: 50, right: 418, top: 98, bottom: 748 },
+  { left: 52, right: 418, top: 100, bottom: 750 },
+  { left: 52, right: 418, top: 102, bottom: 752 },
+  { left: 52, right: 418, top: 104, bottom: 752 },
+  { left: 54, right: 416, top: 104, bottom: 754 },
+  { left: 56, right: 414, top: 104, bottom: 754 },
+  { left: 56, right: 414, top: 102, bottom: 754 },
+  { left: 56, right: 414, top: 100, bottom: 756 },
+  { left: 54, right: 412, top: 98, bottom: 756 },
+  { left: 52, right: 410, top: 94, bottom: 756 },
+  { left: 48, right: 408, top: 90, bottom: 756 },
+  { left: 44, right: 408, top: 86, bottom: 756 },
+  { left: 40, right: 408, top: 84, bottom: 756 },
+  { left: 36, right: 412, top: 82, bottom: 754 },
+  { left: 34, right: 414, top: 80, bottom: 754 },
+  { left: 32, right: 416, top: 80, bottom: 752 },
+  { left: 34, right: 416, top: 82, bottom: 752 },
+  { left: 36, right: 416, top: 84, bottom: 750 },
+  { left: 38, right: 414, top: 86, bottom: 750 },
+  { left: 40, right: 414, top: 90, bottom: 748 },
+  { left: 44, right: 410, top: 94, bottom: 748 },
+  { left: 46, right: 408, top: 98, bottom: 748 },
+  { left: 50, right: 406, top: 100, bottom: 748 },
+  { left: 50, right: 408, top: 102, bottom: 750 }
+];
 
 const INGREDIENT_SPRITES = {
   bread: 0,
@@ -180,6 +256,7 @@ const dessertItems = [
 ];
 
 let audioCtx;
+let audioUnavailable = false;
 let muted = false;
 let state = makeState();
 let lastTime = 0;
@@ -720,7 +797,8 @@ function draw() {
   drawGoal();
   drawLevelBadge();
   if (phoneLayout) drawMobileControls();
-  if (volcanoEditMode) drawVolcanoEditGuide();
+  if (phoneLayout) drawMobileStatusBadges();
+  if (DEBUG_MODE && volcanoEditMode) drawVolcanoEditGuide();
   if (state.tripleFlash > 0) drawTripleToast();
   if (state.levelToastTimer > 0) drawLevelToast();
   if (state.messageTimer > 0) drawMessage(state.message);
@@ -925,42 +1003,20 @@ function getTempCanvas(w, h) {
 }
 
 function getVolcanoFrameBounds(image, frameCount, cropBottom = 0) {
-  const cachedByCrop = volcanoFrameBounds.get(image);
-  const cacheKey = `${frameCount}:${cropBottom}`;
-  if (cachedByCrop?.[cacheKey]) return cachedByCrop[cacheKey];
   const frameW = image.naturalWidth / frameCount;
   const frameH = image.naturalHeight - cropBottom;
-  const offscreen = document.createElement("canvas");
-  offscreen.width = image.naturalWidth;
-  offscreen.height = image.naturalHeight;
-  const offscreenCtx = offscreen.getContext("2d", { willReadFrequently: true });
-  offscreenCtx.drawImage(image, 0, 0);
-  const bounds = [];
-
-  for (let frame = 0; frame < frameCount; frame++) {
-    const startX = Math.floor(frame * frameW);
-    const data = offscreenCtx.getImageData(startX, 0, Math.ceil(frameW), frameH).data;
-    let left = frameW;
-    let right = 0;
-    let top = frameH;
-    let bottom = 0;
-
-    for (let y = 0; y < frameH; y += 2) {
-      for (let x = 0; x < frameW; x += 2) {
-        const alpha = data[(y * Math.ceil(frameW) + x) * 4 + 3];
-        if (alpha < 24) continue;
-        left = Math.min(left, x);
-        right = Math.max(right, x);
-        top = Math.min(top, y);
-        bottom = Math.max(bottom, y);
-      }
-    }
-
-    bounds.push(left <= right ? { left, right, top, bottom } : { left: frameW * 0.5, right: frameW * 0.5, top: 0, bottom: frameH });
+  if (cropBottom === 0 && frameCount === VOLCANO_SMOKE_FRAMES && image === volcanoAnimationImages.smoke) {
+    return VOLCANO_SMOKE_FRAME_BOUNDS;
   }
-
-  volcanoFrameBounds.set(image, { ...(cachedByCrop || {}), [cacheKey]: bounds });
-  return bounds;
+  if (cropBottom === 0 && frameCount === VOLCANO_ERUPTION_FRAMES && image === volcanoAnimationImages.eruption) {
+    return VOLCANO_ERUPTION_FRAME_BOUNDS;
+  }
+  return Array.from({ length: frameCount }, () => ({
+    left: frameW * 0.5,
+    right: frameW * 0.5,
+    top: 0,
+    bottom: frameH
+  }));
 }
 
 function drawGoal() {
@@ -1089,6 +1145,44 @@ function drawMobileControls() {
   ctx.restore();
 }
 
+function drawMobileStatusBadges() {
+  if (!state.running || state.over) return;
+  const badges = [];
+  const powerText = getPowerStatusText();
+  if (state.combo > 1) badges.push({ label: `${state.combo}x combo`, color: "#ffd84c" });
+  if (powerText !== "None") badges.push({ label: powerText, color: "#9ee493" });
+  if (!badges.length) return;
+
+  ctx.save();
+  ctx.font = "900 16px Trebuchet MS, Arial";
+  ctx.textBaseline = "middle";
+  const gap = 8;
+  const widths = badges.map((badge) => Math.min(168, ctx.measureText(badge.label).width + 28));
+  const totalW = widths.reduce((sum, width) => sum + width, 0) + gap * (badges.length - 1);
+  let x = Math.max(14, W / 2 - totalW / 2);
+  const y = state.mode === "dessert" ? 118 : 116;
+
+  for (let i = 0; i < badges.length; i++) {
+    const badge = badges[i];
+    const w = widths[i];
+    const h = 30;
+    ctx.fillStyle = "rgba(255, 248, 232, 0.92)";
+    ctx.strokeStyle = "#201713";
+    ctx.lineWidth = 3;
+    roundedRect(x, y, w, h, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = badge.color;
+    roundedRect(x + 7, y + 7, 9, 16, 4);
+    ctx.fill();
+    ctx.fillStyle = "#201713";
+    ctx.textAlign = "left";
+    ctx.fillText(badge.label, x + 22, y + h / 2);
+    x += w + gap;
+  }
+  ctx.restore();
+}
+
 function drawTouchPad(x, y, w, h, direction, alpha) {
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -1166,7 +1260,6 @@ function drawPlayer() {
   const stackX = getPlateStackOffset();
   const spriteReady = isCurrentPlayerSpriteReady(p.vx);
   const holderTilt = clamp(p.vx / 2600 + state.catchTilt, -0.09, 0.09);
-  const plateTilt = clamp(p.vx / 900 + state.catchTilt, -0.18, 0.18);
 
   ctx.save();
   ctx.translate(p.x, 0);
@@ -1194,13 +1287,6 @@ function drawPlayer() {
       layerTilt
     );
   }
-
-  if (!spriteReady) {
-    const bodyX = -108 * facing;
-    drawPerson(bodyX, p.y - 4, p.vx, facing);
-    drawPivotPlate(plateX, plateY, p.w, p.h, facing, plateTilt);
-    drawHandsOnPlate(plateX, plateY, facing);
-  }
   ctx.restore();
 }
 
@@ -1208,28 +1294,6 @@ function isCurrentPlayerSpriteReady(vx) {
   const walking = Math.abs(vx) > 30;
   const sprite = walking ? playerSprite : playerIdleSprite;
   return sprite.complete && sprite.naturalWidth;
-}
-
-function drawPlate(x, y, w, h) {
-  ctx.fillStyle = "#fff7e0";
-  ctx.strokeStyle = "#201713";
-  ctx.lineWidth = 4;
-  roundedRect(x - w / 2, y - h / 2, w, h, 14);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = "#d1ecf0";
-  roundedRect(x - w / 2 + 18, y - h / 2 + 8, w - 36, h - 16, 10);
-  ctx.fill();
-}
-
-function drawPivotPlate(x, y, w, h, facing, tilt) {
-  const pivotX = x - facing * w * 0.46;
-  ctx.save();
-  ctx.translate(pivotX, y);
-  ctx.rotate(tilt);
-  drawPlate(x - pivotX, 0, w, h);
-  ctx.restore();
 }
 
 function drawPlayerSprite(plateX, plateY, vx, facing) {
@@ -1266,99 +1330,6 @@ function drawPlayerSprite(plateX, plateY, vx, facing) {
     spriteH
   );
   ctx.restore();
-}
-
-function drawPerson(x, y, vx, facing) {
-  const walking = Math.abs(vx) > 30;
-  const stride = walking ? Math.sin(frameNow / 90) : 0;
-  const lean = clamp(vx / 520, -1, 1) * 5;
-
-  ctx.save();
-  ctx.translate(x + lean, y);
-
-  ctx.strokeStyle = "#201713";
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-
-  ctx.lineWidth = 8;
-  ctx.beginPath();
-  ctx.moveTo(-facing * 10, 18);
-  ctx.lineTo(-facing * (24 + stride * 7), 56);
-  ctx.moveTo(facing * 12, 18);
-  ctx.lineTo(facing * (22 - stride * 7), 56);
-  ctx.stroke();
-
-  ctx.fillStyle = "#263f7d";
-  ctx.strokeStyle = "#201713";
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.ellipse(0, -1, 28, 38, -facing * 0.08, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = "#f2b37a";
-  ctx.beginPath();
-  ctx.ellipse(facing * 4, -70, 23, 25, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = "#f2b37a";
-  ctx.beginPath();
-  ctx.moveTo(facing * 21, -72);
-  ctx.lineTo(facing * 34, -67);
-  ctx.lineTo(facing * 21, -62);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = "#573321";
-  ctx.beginPath();
-  ctx.arc(-facing * 6, -83, 25, Math.PI * 1.02, Math.PI * 1.96);
-  ctx.lineTo(facing * 20, -80);
-  ctx.lineTo(-facing * 24, -70);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "#201713";
-  ctx.beginPath();
-  ctx.arc(facing * 15, -70, 3, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = "#201713";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(facing * 14, -61, 7, facing > 0 ? 0.1 : Math.PI + 0.1, facing > 0 ? Math.PI * 0.75 : Math.PI * 1.75);
-  ctx.stroke();
-
-  ctx.strokeStyle = "#f2b37a";
-  ctx.lineWidth = 9;
-  ctx.beginPath();
-  ctx.moveTo(facing * 21, -18);
-  ctx.lineTo(facing * 54, 4);
-  ctx.moveTo(facing * 18, -2);
-  ctx.lineTo(facing * 64, 17);
-  ctx.stroke();
-
-  ctx.restore();
-
-  if (state.effects.shield > 0) {
-    ctx.strokeStyle = "rgba(158, 228, 147, 0.82)";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.ellipse(x, y - 14, 70, 88, 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-}
-
-function drawHandsOnPlate(x, y, facing) {
-  ctx.fillStyle = "#f2b37a";
-  ctx.strokeStyle = "#201713";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(x - facing * 74, y - 5, 9, 0, Math.PI * 2);
-  ctx.arc(x - facing * 62, y + 9, 8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
 }
 
 function drawIngredient(item, x, y, w, h, name) {
@@ -2168,19 +2139,33 @@ function roundedRect(x, y, w, h, r) {
 }
 
 function beep(freq, duration, type, gainValue, force) {
-  if (muted) return;
-  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-  if (!force && audioCtx.currentTime - lastBeepTime < 0.035) return;
-  lastBeepTime = audioCtx.currentTime;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = type;
-  osc.frequency.value = freq;
-  gain.gain.setValueAtTime(gainValue, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-  osc.connect(gain).connect(audioCtx.destination);
-  osc.start();
-  osc.stop(audioCtx.currentTime + duration);
+  if (muted || audioUnavailable) return;
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) {
+    audioUnavailable = true;
+    muted = true;
+    updateHud();
+    return;
+  }
+
+  try {
+    audioCtx = audioCtx || new AudioContextCtor();
+    if (!force && audioCtx.currentTime - lastBeepTime < 0.035) return;
+    lastBeepTime = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(gainValue, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch {
+    audioUnavailable = true;
+    muted = true;
+    updateHud();
+  }
 }
 
 function setCanvasSizeForViewport() {
@@ -2261,6 +2246,16 @@ function setPointerTargetFromEvent(event, ripple) {
   state.touchX = x;
   state.touchHintTimer = 0;
   if (ripple) state.touchRipple = 0.45;
+}
+
+function clearInputState() {
+  keys.clear();
+  pointerTarget = null;
+  volcanoDrag = null;
+  if (!state) return;
+  state.touchActive = false;
+  state.touchRipple = 0;
+  if (state.player) state.touchX = state.player.x;
 }
 
 function randomFrom(list) {
@@ -2401,6 +2396,11 @@ function togglePause() {
 startButton.addEventListener("click", startGame);
 pauseButton.addEventListener("click", togglePause);
 soundToggle.addEventListener("click", () => {
+  if (audioUnavailable) {
+    muted = true;
+    updateHud();
+    return;
+  }
   muted = !muted;
   updateHud();
 });
@@ -2409,18 +2409,21 @@ window.addEventListener("orientationchange", () => {
   setTimeout(handleViewportResize, 120);
 });
 if (window.visualViewport) window.visualViewport.addEventListener("resize", handleViewportResize);
+window.addEventListener("blur", clearInputState);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") clearInputState();
+});
 
 window.addEventListener("keydown", (event) => {
-  if (event.key === "v" || event.key === "V") {
+  if (DEBUG_MODE && (event.key === "v" || event.key === "V")) {
     volcanoEditMode = !volcanoEditMode;
-    pointerTarget = null;
-    state.touchActive = false;
+    clearInputState();
     event.preventDefault();
     draw();
     return;
   }
 
-  if (volcanoEditMode) {
+  if (DEBUG_MODE && volcanoEditMode) {
     const step = event.shiftKey ? 10 : 2;
     if (event.key === "ArrowLeft") moveVolcanoPlacement(-step, 0);
     else if (event.key === "ArrowRight") moveVolcanoPlacement(step, 0);
@@ -2440,7 +2443,7 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   if (event.key === "p" || event.key === "P") togglePause();
-  if (event.key === "t" || event.key === "T") jumpToDessertTest();
+  if (DEBUG_MODE && (event.key === "t" || event.key === "T")) jumpToDessertTest();
   if ((event.key === " " || event.key === "Enter") && !state.running) startGame();
 });
 
@@ -2450,7 +2453,7 @@ window.addEventListener("keyup", (event) => {
 
 canvas.addEventListener("pointerdown", (event) => {
   event.preventDefault();
-  if (volcanoEditMode) {
+  if (DEBUG_MODE && volcanoEditMode) {
     const point = canvasPointerPoint(event);
     const placement = getVolcanoPlacementForLayout();
     volcanoDrag = { dx: placement.x - point.x, dy: placement.y - point.y };
@@ -2468,7 +2471,7 @@ canvas.addEventListener("pointerdown", (event) => {
 canvas.addEventListener("pointermove", (event) => {
   if (!event.buttons) return;
   event.preventDefault();
-  if (volcanoEditMode && volcanoDrag) {
+  if (DEBUG_MODE && volcanoEditMode && volcanoDrag) {
     const point = canvasPointerPoint(event);
     const placement = getVolcanoPlacementForLayout();
     placement.x = clamp(point.x + volcanoDrag.dx, 0, W);
