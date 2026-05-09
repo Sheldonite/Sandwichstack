@@ -37,6 +37,25 @@ const VOLCANO_SMOKE_FRAMES = 36;
 const VOLCANO_ERUPTION_FRAMES = 36;
 const ASSET_VERSION = 2;
 const VOLCANO_PLACEMENT_STORAGE_KEY = "sandwichStackVolcanoPlacementV2";
+const STACK_SCALE = 0.7;
+const FLAME_TUNING = {
+  left: { x: 0, y: -8, scale: 1.31 },
+  right: { x: -5, y: -5, scale: 1.3 }
+};
+const HUD_TEXT_KEYS = ["score", "stack", "lives", "combo", "best", "power"];
+const HUD_BUTTON_KEYS = ["pause", "sound"];
+const HUD_TEXT_BASELINE = {
+  score: { labelX: 0, labelY: 0, valueX: 0, valueY: 0 },
+  stack: { labelX: 13, labelY: 0, valueX: 16, valueY: 5 },
+  lives: { labelX: 22, labelY: 0, valueX: 25, valueY: 5 },
+  combo: { labelX: 30, labelY: 0, valueX: 31, valueY: 4 },
+  best: { labelX: 32, labelY: 0, valueX: 32, valueY: 4 },
+  power: { labelX: 10, labelY: 0, valueX: 9, valueY: 4 }
+};
+const HUD_BUTTON_BASELINE = {
+  pause: { x: -4, y: -1 },
+  sound: { x: 3, y: -1 }
+};
 const WALK_FRAME_OFFSETS = [
   { x: 0, y: 0 },
   { x: 14.5, y: 0 },
@@ -96,10 +115,56 @@ const effectImages = loadNamedImages({
   smokePuff: "assets/effects/smoke-puff.png",
   glint: "assets/effects/glint.png"
 });
+const uiImages = loadNamedImages({
+  badge: "assets/ui/badge-wood.png"
+});
+const UI_FONT = '"Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif';
+const UI_TEXT = "#fff1c7";
+const UI_LABEL = "#ffd06f";
+const UI_ACCENT = "#79d8cc";
+const UI_SHADOW = "rgba(32, 16, 8, 0.7)";
+const ambientImage = new Image();
+ambientImage.src = `assets/ambient/ambient-props.png?v=${ASSET_VERSION}`;
+ambientImage.onload = () => draw();
 const volcanoAnimationImages = loadNamedImages({
   smoke: "assets/volcano/smoke-flow-36-premium-spritesheet.png",
   eruption: "assets/volcano/eruption-36-premium-spritesheet.png"
 });
+const AMBIENT_SPRITES = {
+  birds: [
+    { x: 40, y: 56, w: 258, h: 150 },
+    { x: 392, y: 48, w: 202, h: 168 },
+    { x: 670, y: 48, w: 222, h: 134 },
+    { x: 952, y: 102, w: 254, h: 90 }
+  ],
+  petals: [
+    { x: 48, y: 308, w: 136, h: 118 },
+    { x: 260, y: 316, w: 140, h: 98 },
+    { x: 472, y: 304, w: 132, h: 122 },
+    { x: 668, y: 294, w: 126, h: 130 },
+    { x: 858, y: 316, w: 128, h: 110 },
+    { x: 1056, y: 310, w: 144, h: 102 }
+  ],
+  clouds: [
+    { x: 50, y: 500, w: 286, h: 158 },
+    { x: 382, y: 538, w: 274, h: 114 },
+    { x: 730, y: 484, w: 210, h: 174 },
+    { x: 1018, y: 538, w: 184, h: 96 }
+  ],
+  flames: [
+    { x: 116, y: 706, w: 126, h: 174 },
+    { x: 394, y: 688, w: 140, h: 192 },
+    { x: 676, y: 696, w: 132, h: 184 }
+  ],
+  torches: [
+    { x: 112, y: 900, w: 118, h: 306 },
+    { x: 348, y: 902, w: 108, h: 302 }
+  ],
+  signs: [
+    { x: 548, y: 902, w: 280, h: 298 },
+    { x: 916, y: 900, w: 290, h: 302 }
+  ]
+};
 const VOLCANO_SMOKE_FRAME_BOUNDS = [
   { left: 48, right: 368, top: 108, bottom: 752 },
   { left: 48, right: 368, top: 108, bottom: 752 },
@@ -236,6 +301,22 @@ const powerItems = [
   { name: "shield", label: "Shield", color: "#9ee493", edge: "#2c8a5e", h: 34 }
 ];
 
+const STACK_WIDTHS = {
+  bread: 94,
+  lettuce: 88,
+  cheese: 86,
+  tomato: 78,
+  patty: 92,
+  pickle: 66,
+  "chocolate cake": 88,
+  "vanilla cake": 88,
+  "strawberry cake": 88,
+  "red velvet cake": 90,
+  "blueberry frosting": 82,
+  "mint frosting": 82,
+  "cherry frosting": 82
+};
+
 const levels = [
   { name: "Beach Walk", score: 0, speed: 150, minDelay: 0.52, badChance: 0.13, powerChance: 0.085, tint: "#68c8d6" },
   { name: "Boardwalk Rush", score: 5000, speed: 178, minDelay: 0.47, badChance: 0.17, powerChance: 0.08, tint: "#f5c56b" },
@@ -290,7 +371,6 @@ function makeState() {
     landBursts: [],
     plateBounce: 0,
     catchTilt: 0,
-    stackSway: 0,
     touchActive: false,
     touchX: W / 2,
     touchHintTimer: 5,
@@ -405,7 +485,6 @@ function update(dt) {
   updateLandBursts(dt);
   state.plateBounce = Math.max(0, state.plateBounce - dt);
   state.catchTilt *= Math.pow(0.015, dt);
-  state.stackSway *= Math.pow(0.035, dt);
   state.touchHintTimer = Math.max(0, state.touchHintTimer - dt);
   state.touchRipple = Math.max(0, state.touchRipple - dt);
 
@@ -543,13 +622,14 @@ function collect(drop) {
     state.comboTimer = 3.2;
     state.plateBounce = 0.22;
     state.catchTilt = landingOffset * 0.07;
-    state.stackSway = landingOffset * 10;
     advanceGoal("catch", 1);
     if (state.combo >= 8) advanceGoal("combo", 1);
     if (state.mode === "dessert") advanceGoal("dessert", 1);
+    const stackWidth = getStackLayerWidth(drop);
     state.stack.push({
       ...drop,
-      w: clamp(drop.w, 58, 96),
+      baseW: stackWidth,
+      w: stackWidth,
       h: drop.h,
       squash: 0.24,
       settle: 0.24,
@@ -585,6 +665,16 @@ function collect(drop) {
     state.pendingDessert = true;
     state.spawnTimer = 0.2;
   }
+}
+
+function getStackLayerWidth(item) {
+  const baseWidth = STACK_WIDTHS[item.name] || clamp(item.w, 72, 90);
+  const variationSeed = (state.stack.length * 17 + item.name.length * 11) % 9;
+  return baseWidth + variationSeed - 4;
+}
+
+function getScaledStackWidth(item) {
+  return (item.baseW || item.w) * STACK_SCALE;
 }
 
 function getSpawnDelay() {
@@ -742,11 +832,12 @@ function updateHud() {
   highScoreEl.textContent = Math.max(highScore, state.score);
   state.lastPowerText = getPowerStatusText();
   powerStatusEl.textContent = state.lastPowerText;
-  pauseButton.textContent = state.paused ? "GO" : "II";
+  pauseButton.classList.toggle("is-paused", state.paused);
   pauseButton.setAttribute("aria-label", state.paused ? "Resume game" : "Pause game");
   pauseButton.setAttribute("title", state.paused ? "Resume game" : "Pause game");
-  soundToggle.textContent = muted ? "OFF" : "SFX";
+  soundToggle.classList.toggle("is-muted", muted);
   soundToggle.setAttribute("aria-label", muted ? "Turn sound on" : "Turn sound off");
+  soundToggle.setAttribute("title", muted ? "Turn sound on" : "Turn sound off");
 }
 
 function makeGoal(index) {
@@ -797,7 +888,6 @@ function draw() {
   drawGoal();
   drawLevelBadge();
   if (phoneLayout) drawMobileControls();
-  if (phoneLayout) drawMobileStatusBadges();
   if (DEBUG_MODE && volcanoEditMode) drawVolcanoEditGuide();
   if (state.tripleFlash > 0) drawTripleToast();
   if (state.levelToastTimer > 0) drawLevelToast();
@@ -820,6 +910,7 @@ function drawScene() {
     drawBackgroundMoodWash();
     drawOceanShimmer();
     drawBackgroundVolcanoEffects(state.mode === "dessert");
+    drawAmbientMidground();
   } else {
     const gradient = ctx.createLinearGradient(0, 0, 0, H);
     if (state.mode === "dessert") {
@@ -875,6 +966,7 @@ function drawScene() {
     drawPalmLeaf(W - (phoneLayout ? 40 : 70), phoneLayout ? 84 : 64, phoneLayout ? 82 : 98, 3.52, "#2c9a63");
 
     drawBoardwalk(getBoardwalkY());
+    drawAmbientMidground();
   }
 }
 
@@ -918,6 +1010,145 @@ function drawOceanShimmer() {
     ctx.stroke();
   }
   ctx.restore();
+}
+
+function drawAmbientMidground() {
+  drawSurfParticles();
+  if (!ambientImage.complete || !ambientImage.naturalWidth) return;
+  drawMovingClouds();
+  drawBirds();
+  drawDriftingPetals();
+  drawTikiTorchesAndSigns();
+}
+
+function drawAmbientSprite(rect, x, y, w, h, options = {}) {
+  ctx.save();
+  ctx.globalAlpha *= options.alpha ?? 1;
+  ctx.translate(x + w / 2, y + h / 2);
+  if (options.flipX) ctx.scale(-1, 1);
+  if (options.rotation) ctx.rotate(options.rotation);
+  ctx.drawImage(ambientImage, rect.x, rect.y, rect.w, rect.h, -w / 2, -h / 2, w, h);
+  ctx.restore();
+}
+
+function drawMovingClouds() {
+  const yBase = phoneLayout ? 76 : 56;
+  const cloudScale = phoneLayout ? 0.34 : 0.42;
+  ctx.save();
+  const cloudIndexes = phoneLayout ? [1, 3] : [0, 2, 3];
+  for (let i = 0; i < cloudIndexes.length; i++) {
+    const rect = AMBIENT_SPRITES.clouds[cloudIndexes[i]];
+    const w = rect.w * cloudScale * (i === 1 ? 0.86 : 1);
+    const h = rect.h * cloudScale * (i === 1 ? 0.86 : 1);
+    const travel = W + w + 170;
+    const speed = phoneLayout ? 2.8 + i * 0.9 : 3.5 + i * 1.1;
+    const x = ((frameNow / 1000) * speed + i * 310) % travel - w - 85;
+    const y = yBase + (i % 2) * (phoneLayout ? 42 : 32) + Math.sin(frameNow / 3100 + i) * 4;
+    drawAmbientSprite(rect, x, y, w, h, { alpha: 0.42 + i * 0.06 });
+  }
+  ctx.restore();
+}
+
+function drawBirds() {
+  const birdScale = phoneLayout ? 0.17 : 0.21;
+  const birds = phoneLayout
+    ? [{ sprite: 0, dir: 1, offset: 0 }]
+    : [
+        { sprite: 0, dir: 1, offset: 0 },
+        { sprite: 3, dir: -1, offset: 480 }
+      ];
+  for (let i = 0; i < birds.length; i++) {
+    const bird = birds[i];
+    const rect = AMBIENT_SPRITES.birds[bird.sprite];
+    const w = rect.w * birdScale * (bird.sprite === 3 ? 0.82 : 1);
+    const h = rect.h * birdScale * (bird.sprite === 3 ? 0.82 : 1);
+    const travel = W + w + 220;
+    const speed = 13 + i * 4;
+    const progress = ((frameNow / 1000) * speed + bird.offset) % travel;
+    const x = bird.dir > 0 ? progress - w - 110 : W + 110 - progress;
+    const y = (phoneLayout ? 126 : 100) + Math.sin(frameNow / 900 + i * 1.4) * 7 + i * 24;
+    drawAmbientSprite(rect, x, y, w, h, { alpha: 0.62, flipX: bird.dir < 0 });
+  }
+}
+
+function drawDriftingPetals() {
+  const top = phoneLayout ? 166 : 136;
+  const bottom = phoneLayout ? H - 278 : H - 190;
+  const scale = phoneLayout ? 0.14 : 0.18;
+  const count = phoneLayout ? 4 : 6;
+  for (let i = 0; i < count; i++) {
+    const rect = AMBIENT_SPRITES.petals[i % AMBIENT_SPRITES.petals.length];
+    const w = rect.w * scale * (0.72 + (i % 3) * 0.14);
+    const h = rect.h * scale * (0.72 + (i % 3) * 0.14);
+    const fall = (frameNow / (62 + i * 4) + i * 128) % (bottom - top + 90);
+    const y = top + fall - 45;
+    const x = (i * 151 + Math.sin(frameNow / 1100 + i) * 24 + frameNow / (130 + i * 10)) % (W + 80) - 40;
+    const rotation = Math.sin(frameNow / 720 + i) * 0.42;
+    drawAmbientSprite(rect, x, y, w, h, { alpha: 0.42, rotation });
+  }
+}
+
+function drawSurfParticles() {
+  const surfY = phoneLayout ? H * 0.48 : 318;
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 248, 232, 0.5)";
+  const count = phoneLayout ? 12 : 18;
+  for (let i = 0; i < count; i++) {
+    const phase = frameNow / 900 + i * 1.73;
+    const x = (i * 67 + frameNow / (54 + (i % 5) * 12)) % (W + 60) - 30;
+    const y = surfY + Math.sin(phase) * 7 + (i % 3) * 10;
+    const r = 1.1 + (i % 3) * 0.55;
+    ctx.globalAlpha = 0.12 + Math.abs(Math.sin(phase * 1.3)) * 0.22;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r * 2.4, r, Math.sin(phase) * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTikiTorchesAndSigns() {
+  const ground = phoneLayout ? H - 188 : H - 130;
+  const torchScale = phoneLayout ? 0.26 : 0.31;
+  const signScale = phoneLayout ? 0.24 : 0.3;
+  const leftTorch = AMBIENT_SPRITES.torches[0];
+  const rightTorch = AMBIENT_SPRITES.torches[1];
+  const leftSign = AMBIENT_SPRITES.signs[0];
+  const rightSign = AMBIENT_SPRITES.signs[1];
+  const torchBob = Math.sin(frameNow / 1400) * 2;
+
+  drawAnchoredTorch(leftTorch, phoneLayout ? 10 : 22, ground - leftTorch.h * torchScale + torchBob, torchScale, 0);
+  if (!phoneLayout) {
+    drawAnchoredTorch(rightTorch, W - (rightTorch.w * torchScale) - 26, ground - rightTorch.h * torchScale - torchBob, torchScale, 1);
+  }
+
+  const sway = Math.sin(frameNow / 1100) * 0.035;
+  if (phoneLayout) {
+    const w = leftSign.w * signScale;
+    const h = leftSign.h * signScale;
+    drawAmbientSprite(leftSign, W / 2 - w / 2, ground - h + 34, w, h, { alpha: 0.7, rotation: sway });
+  } else {
+    drawAmbientSprite(leftSign, 100, ground - leftSign.h * signScale + 22, leftSign.w * signScale, leftSign.h * signScale, { alpha: 0.82, rotation: sway });
+    drawAmbientSprite(rightSign, W - rightSign.w * signScale - 110, ground - rightSign.h * signScale + 24, rightSign.w * signScale, rightSign.h * signScale, { alpha: 0.82, rotation: -sway * 0.8 });
+  }
+}
+
+function drawAnchoredTorch(torch, x, y, scale, index) {
+  const w = torch.w * scale;
+  const h = torch.h * scale;
+  const rotation = Math.sin(frameNow / (index ? 1700 : 1800) + index * 2) * 0.015;
+  drawAmbientSprite(torch, x, y, w, h, { alpha: 0.72, rotation });
+  drawTorchFlame(x + w * 0.5, y + h * 0.23, scale, index);
+}
+
+function drawTorchFlame(anchorX, anchorY, torchScale, index) {
+  const frame = Math.floor(frameNow / 210 + index) % AMBIENT_SPRITES.flames.length;
+  const rect = AMBIENT_SPRITES.flames[frame];
+  const tuning = index === 0 ? FLAME_TUNING.left : FLAME_TUNING.right;
+  const scale = torchScale * 0.46 * tuning.scale;
+  const pulse = 1 + Math.sin(frameNow / 320 + index) * 0.018;
+  const w = 134 * scale * pulse;
+  const h = 184 * scale * pulse;
+  drawAmbientSprite(rect, anchorX + tuning.x - w / 2, anchorY + tuning.y - h * 0.78, w, h, { alpha: 0.95 });
 }
 
 function drawBackgroundVolcanoEffects(erupting) {
@@ -1027,19 +1258,22 @@ function drawGoal() {
   const w = phoneLayout ? (state.mode === "dessert" ? W - 184 : W - 28) : 292;
   const h = phoneLayout ? 42 : 50;
   ctx.save();
-  ctx.fillStyle = "rgba(255, 248, 232, 0.9)";
-  ctx.strokeStyle = "#201713";
-  ctx.lineWidth = 3;
-  roundedRect(x, y, w, h, 8);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = "#201713";
-  ctx.font = phoneLayout ? "900 14px Trebuchet MS, Arial" : "900 16px Trebuchet MS, Arial";
+  if (!drawUiBadgeImage(x - 8, y - 10, w + 16, h + 20, 0.96)) {
+    ctx.fillStyle = "rgba(52, 27, 15, 0.92)";
+    ctx.strokeStyle = "#201713";
+    ctx.lineWidth = 3;
+    roundedRect(x, y, w, h, 8);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.font = phoneLayout ? `900 13px ${UI_FONT}` : `900 15px ${UI_FONT}`;
+  setUiTextShadow(0.8);
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText(state.goal.text, x + 16, y + h / 2 - (phoneLayout ? 1 : 6));
+  drawOutlinedText(state.goal.text, x + 16, y + h / 2 - (phoneLayout ? 1 : 6), UI_TEXT, "#2b170b", 2);
   ctx.textAlign = "right";
-  ctx.fillText(progress, x + w - 18, y + h / 2 - (phoneLayout ? 1 : 6));
+  drawOutlinedText(progress, x + w - 18, y + h / 2 - (phoneLayout ? 1 : 6), UI_ACCENT, "#17302d", 2);
+  clearUiTextShadow();
   ctx.restore();
 }
 
@@ -1054,22 +1288,25 @@ function drawLevelBadge() {
   const y = phoneLayout ? 14 : 18;
 
   ctx.save();
-  ctx.fillStyle = "rgba(255, 248, 232, 0.9)";
-  ctx.strokeStyle = "#201713";
-  ctx.lineWidth = 3;
-  roundedRect(x, y, w, h, 8);
-  ctx.fill();
-  ctx.stroke();
+  if (!drawUiBadgeImage(x - 8, y - 10, w + 16, h + 20, 0.96)) {
+    ctx.fillStyle = "rgba(52, 27, 15, 0.92)";
+    ctx.strokeStyle = "#201713";
+    ctx.lineWidth = 3;
+    roundedRect(x, y, w, h, 8);
+    ctx.fill();
+    ctx.stroke();
+  }
 
-  ctx.fillStyle = "#201713";
-  ctx.font = phoneLayout ? "900 13px Trebuchet MS, Arial" : "900 14px Trebuchet MS, Arial";
+  setUiTextShadow(0.8);
+  ctx.font = phoneLayout ? `900 12px ${UI_FONT}` : `900 13px ${UI_FONT}`;
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText(`Level ${state.levelIndex + 1}`, x + 16, y + (phoneLayout ? 15 : 18));
+  drawOutlinedText(`Level ${state.levelIndex + 1}`, x + 16, y + (phoneLayout ? 15 : 18), UI_LABEL, "#2b170b", 2);
   ctx.textAlign = "right";
-  ctx.fillText(level.name, x + w - 16, y + (phoneLayout ? 15 : 18));
+  drawOutlinedText(level.name, x + w - 16, y + (phoneLayout ? 15 : 18), UI_TEXT, "#2b170b", 2);
+  clearUiTextShadow();
 
-  ctx.fillStyle = "rgba(32, 23, 19, 0.18)";
+  ctx.fillStyle = "rgba(255, 248, 232, 0.2)";
   roundedRect(x + 16, y + h - 16, w - 32, 8, 4);
   ctx.fill();
   ctx.fillStyle = level.tint;
@@ -1085,24 +1322,27 @@ function drawLevelToast() {
 
   ctx.save();
   ctx.globalAlpha = Math.min(1, alpha * 1.4);
-  ctx.fillStyle = "rgba(255, 248, 232, 0.94)";
-  ctx.strokeStyle = "#201713";
-  ctx.lineWidth = 4;
-  roundedRect(W / 2 - 168, 82 - lift, 336, 76, 8);
-  ctx.fill();
-  ctx.stroke();
+  if (!drawUiBadgeImage(W / 2 - 184, 70 - lift, 368, 102, 1)) {
+    ctx.fillStyle = "rgba(52, 27, 15, 0.94)";
+    ctx.strokeStyle = "#201713";
+    ctx.lineWidth = 4;
+    roundedRect(W / 2 - 168, 82 - lift, 336, 76, 8);
+    ctx.fill();
+    ctx.stroke();
+  }
 
   ctx.fillStyle = level.tint;
   roundedRect(W / 2 - 156, 92 - lift, 312, 8, 4);
   ctx.fill();
 
-  ctx.fillStyle = "#201713";
+  setUiTextShadow(1);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = "900 18px Trebuchet MS, Arial";
-  ctx.fillText(`Level ${state.levelIndex + 1}`, W / 2, 116 - lift);
-  ctx.font = "900 30px Trebuchet MS, Arial";
-  ctx.fillText(level.name, W / 2, 140 - lift);
+  ctx.font = `900 17px ${UI_FONT}`;
+  drawOutlinedText(`Level ${state.levelIndex + 1}`, W / 2, 116 - lift, UI_LABEL, "#2b170b", 2);
+  ctx.font = `900 28px ${UI_FONT}`;
+  drawOutlinedText(level.name, W / 2, 140 - lift, UI_TEXT, "#2b170b", 3);
+  clearUiTextShadow();
   ctx.restore();
 }
 
@@ -1145,59 +1385,26 @@ function drawMobileControls() {
   ctx.restore();
 }
 
-function drawMobileStatusBadges() {
-  if (!state.running || state.over) return;
-  const badges = [];
-  const powerText = getPowerStatusText();
-  if (state.combo > 1) badges.push({ label: `${state.combo}x combo`, color: "#ffd84c" });
-  if (powerText !== "None") badges.push({ label: powerText, color: "#9ee493" });
-  if (!badges.length) return;
-
+function drawTouchPad(x, y, w, h, direction, alpha) {
   ctx.save();
-  ctx.font = "900 16px Trebuchet MS, Arial";
-  ctx.textBaseline = "middle";
-  const gap = 8;
-  const widths = badges.map((badge) => Math.min(168, ctx.measureText(badge.label).width + 28));
-  const totalW = widths.reduce((sum, width) => sum + width, 0) + gap * (badges.length - 1);
-  let x = Math.max(14, W / 2 - totalW / 2);
-  const y = state.mode === "dessert" ? 118 : 116;
-
-  for (let i = 0; i < badges.length; i++) {
-    const badge = badges[i];
-    const w = widths[i];
-    const h = 30;
-    ctx.fillStyle = "rgba(255, 248, 232, 0.92)";
-    ctx.strokeStyle = "#201713";
+  ctx.globalAlpha = alpha;
+  if (!drawUiBadgeImage(x - 10, y - 10, w + 20, h + 20, 0.86)) {
+    ctx.fillStyle = "rgba(255, 248, 232, 0.72)";
+    ctx.strokeStyle = "rgba(32, 23, 19, 0.7)";
     ctx.lineWidth = 3;
     roundedRect(x, y, w, h, 8);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = badge.color;
-    roundedRect(x + 7, y + 7, 9, 16, 4);
-    ctx.fill();
-    ctx.fillStyle = "#201713";
-    ctx.textAlign = "left";
-    ctx.fillText(badge.label, x + 22, y + h / 2);
-    x += w + gap;
   }
-  ctx.restore();
-}
-
-function drawTouchPad(x, y, w, h, direction, alpha) {
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = "rgba(255, 248, 232, 0.72)";
-  ctx.strokeStyle = "rgba(32, 23, 19, 0.7)";
-  ctx.lineWidth = 3;
-  roundedRect(x, y, w, h, 8);
-  ctx.fill();
-  ctx.stroke();
   drawChevronIcon(x + w / 2, y + h / 2, direction, 24);
   ctx.restore();
 }
 
 function drawChevronIcon(x, y, direction, size) {
-  ctx.strokeStyle = "#201713";
+  ctx.strokeStyle = UI_TEXT;
+  ctx.shadowColor = UI_SHADOW;
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 2;
   ctx.lineWidth = 7;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
@@ -1206,6 +1413,7 @@ function drawChevronIcon(x, y, direction, size) {
   ctx.lineTo(x - direction * size * 0.35, y);
   ctx.lineTo(x + direction * size * 0.35, y + size * 0.55);
   ctx.stroke();
+  clearUiTextShadow();
 }
 
 function drawDrops() {
@@ -1272,16 +1480,13 @@ function drawPlayer() {
 
   for (let i = 0; i < state.stack.length; i++) {
     const item = state.stack[i];
-    const layer = state.stack.length <= 1 ? 0 : i / (state.stack.length - 1);
-    const wobble = Math.sin(frameNow / 180 + i * 0.8) * Math.min(i * 0.55, 8);
-    const sway = state.stackSway * (0.2 + layer * 0.8);
     const settle = item.settle ? Math.sin((item.settle / 0.24) * Math.PI) * -6 : 0;
-    const layerTilt = (item.tilt || 0) + state.catchTilt * (0.22 + layer * 0.5);
+    const layerTilt = item.settle ? (item.tilt || 0) * Math.sin((item.settle / 0.24) * Math.PI) : 0;
     drawStackIngredient(
       item,
-      stackX + (item.stackOffset || 0) + wobble + sway,
+      stackX + (item.stackOffset || 0),
       stackBase - i * STACK_STEP + settle,
-      item.w,
+      getScaledStackWidth(item),
       item.h,
       item.name,
       layerTilt
@@ -1426,6 +1631,42 @@ function drawCenteredImage(image, x, y, w, h, alpha = 1) {
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(image, x - w / 2, y - h / 2, w, h);
   ctx.restore();
+}
+
+function drawUiBadgeImage(x, y, w, h, alpha = 1) {
+  const image = uiImages.badge;
+  if (!image?.complete || !image.naturalWidth) return false;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(image, x, y, w, h);
+  ctx.restore();
+  return true;
+}
+
+function setUiTextShadow(strength = 1) {
+  ctx.shadowColor = UI_SHADOW;
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = Math.max(1, Math.round(2 * strength));
+}
+
+function clearUiTextShadow() {
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+}
+
+function drawOutlinedText(text, x, y, fill = UI_TEXT, stroke = "#201713", width = 3) {
+  ctx.lineJoin = "round";
+  ctx.miterLimit = 2;
+  ctx.lineWidth = width;
+  ctx.strokeStyle = stroke;
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = fill;
+  ctx.fillText(text, x, y);
 }
 
 function drawImageParticle(image, x, y, w, h, rotation = 0, alpha = 1) {
@@ -1683,17 +1924,20 @@ function drawLandBursts() {
 
 function drawMessage(text) {
   ctx.save();
-  ctx.fillStyle = "rgba(255, 248, 232, 0.92)";
-  ctx.strokeStyle = "#201713";
-  ctx.lineWidth = 4;
-  roundedRect(W / 2 - 135, 104, 270, 70, 8);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = "#201713";
-  ctx.font = "900 34px Trebuchet MS, Arial";
+  if (!drawUiBadgeImage(W / 2 - 152, 92, 304, 94, 0.98)) {
+    ctx.fillStyle = "rgba(52, 27, 15, 0.94)";
+    ctx.strokeStyle = "#201713";
+    ctx.lineWidth = 4;
+    roundedRect(W / 2 - 135, 104, 270, 70, 8);
+    ctx.fill();
+    ctx.stroke();
+  }
+  setUiTextShadow(1);
+  ctx.font = `900 31px ${UI_FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, W / 2, 139);
+  drawOutlinedText(text, W / 2, 139, UI_TEXT, "#2b170b", 3);
+  clearUiTextShadow();
   ctx.restore();
 }
 
@@ -1701,19 +1945,22 @@ function drawPauseScreen() {
   ctx.save();
   ctx.fillStyle = "rgba(32, 23, 19, 0.42)";
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = "#fff8e8";
-  ctx.strokeStyle = "#201713";
-  ctx.lineWidth = 5;
-  roundedRect(W / 2 - 170, H / 2 - 68, 340, 136, 8);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = "#201713";
+  if (!drawUiBadgeImage(W / 2 - 192, H / 2 - 84, 384, 168, 1)) {
+    ctx.fillStyle = "rgba(52, 27, 15, 0.96)";
+    ctx.strokeStyle = "#201713";
+    ctx.lineWidth = 5;
+    roundedRect(W / 2 - 170, H / 2 - 68, 340, 136, 8);
+    ctx.fill();
+    ctx.stroke();
+  }
+  setUiTextShadow(1);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = "900 52px Trebuchet MS, Arial";
-  ctx.fillText("Paused", W / 2, H / 2 - 8);
-  ctx.font = "900 22px Trebuchet MS, Arial";
-  ctx.fillText("Press pause or P to resume", W / 2, H / 2 + 40);
+  ctx.font = `900 48px ${UI_FONT}`;
+  drawOutlinedText("Paused", W / 2, H / 2 - 8, UI_LABEL, "#2b170b", 4);
+  ctx.font = `900 19px ${UI_FONT}`;
+  drawOutlinedText("Press pause or P to resume", W / 2, H / 2 + 40, UI_TEXT, "#2b170b", 2);
+  clearUiTextShadow();
   ctx.restore();
 }
 
@@ -1769,23 +2016,26 @@ function drawTripleToast() {
     ctx.restore();
   }
 
-  ctx.fillStyle = "rgba(255, 248, 232, 0.94)";
-  ctx.strokeStyle = "#201713";
-  ctx.lineWidth = 5;
-  roundedRect(-188, -42, 376, 84, 8);
-  ctx.fill();
-  ctx.stroke();
+  if (!drawUiBadgeImage(-206, -56, 412, 112, 1)) {
+    ctx.fillStyle = "rgba(52, 27, 15, 0.94)";
+    ctx.strokeStyle = "#201713";
+    ctx.lineWidth = 5;
+    roundedRect(-188, -42, 376, 84, 8);
+    ctx.fill();
+    ctx.stroke();
+  }
 
   ctx.fillStyle = "#ff6b6b";
   roundedRect(-172, -30, 344, 10, 5);
   ctx.fill();
-  ctx.fillStyle = "#201713";
+  setUiTextShadow(1);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = "900 44px Trebuchet MS, Arial";
-  ctx.fillText("TRIPLE POINTS", 0, 2);
-  ctx.font = "900 17px Trebuchet MS, Arial";
-  ctx.fillText("x3 on every sweet catch", 0, 30);
+  ctx.font = `900 39px ${UI_FONT}`;
+  drawOutlinedText("TRIPLE POINTS", 0, 2, UI_LABEL, "#2b170b", 4);
+  ctx.font = `900 16px ${UI_FONT}`;
+  drawOutlinedText("x3 on every sweet catch", 0, 30, UI_TEXT, "#2b170b", 2);
+  clearUiTextShadow();
   ctx.restore();
 }
 
@@ -1796,19 +2046,22 @@ function drawDessertTimer() {
   const y = phoneLayout ? 68 : 18;
   const barW = phoneLayout ? boxW - 32 : 154;
   ctx.save();
-  ctx.fillStyle = "rgba(255, 248, 232, 0.9)";
-  ctx.strokeStyle = "#201713";
-  ctx.lineWidth = 3;
-  roundedRect(x, y, boxW, boxH, 8);
-  ctx.fill();
-  ctx.stroke();
+  if (!drawUiBadgeImage(x - 8, y - 10, boxW + 16, boxH + 20, 0.96)) {
+    ctx.fillStyle = "rgba(52, 27, 15, 0.92)";
+    ctx.strokeStyle = "#201713";
+    ctx.lineWidth = 3;
+    roundedRect(x, y, boxW, boxH, 8);
+    ctx.fill();
+    ctx.stroke();
+  }
   const progress = state.modeDuration ? clamp(state.modeTimer / state.modeDuration, 0, 1) : 0;
-  ctx.fillStyle = "#201713";
-  ctx.font = phoneLayout ? "900 20px Trebuchet MS, Arial" : "900 24px Trebuchet MS, Arial";
+  setUiTextShadow(0.8);
+  ctx.font = phoneLayout ? `900 19px ${UI_FONT}` : `900 22px ${UI_FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(`x3 ${Math.ceil(state.modeTimer)}s`, x + boxW / 2, y + (phoneLayout ? 19 : 21));
-  ctx.fillStyle = "rgba(32, 23, 19, 0.18)";
+  drawOutlinedText(`x3 ${Math.ceil(state.modeTimer)}s`, x + boxW / 2, y + (phoneLayout ? 19 : 21), UI_TEXT, "#2b170b", 2);
+  clearUiTextShadow();
+  ctx.fillStyle = "rgba(255, 248, 232, 0.2)";
   roundedRect(x + 16, y + boxH - 12, barW, 6, 3);
   ctx.fill();
   ctx.fillStyle = "#ff6b6b";
@@ -2310,6 +2563,46 @@ function saveVolcanoPlacement() {
   }
 }
 
+function getHudTextGroups() {
+  const groups = Array.from(document.querySelectorAll(".hud div"));
+  return Object.fromEntries(HUD_TEXT_KEYS.map((key, index) => [key, groups[index]]));
+}
+
+function applyHudTextTuning() {
+  const groups = getHudTextGroups();
+  for (const key of HUD_TEXT_KEYS) {
+    const group = groups[key];
+    const baseline = HUD_TEXT_BASELINE[key];
+    if (!group || !baseline) continue;
+    group.style.setProperty("--hud-label-x", makeHudScaledOffset(baseline.labelX));
+    group.style.setProperty("--hud-label-y", makeHudScaledOffset(baseline.labelY));
+    group.style.setProperty("--hud-value-x", makeHudScaledOffset(baseline.valueX));
+    group.style.setProperty("--hud-value-y", makeHudScaledOffset(baseline.valueY));
+  }
+}
+
+function makeHudScaledOffset(value) {
+  return value ? `calc(var(--hud-tune-scale, 1) * ${value}px)` : "0px";
+}
+
+function getHudButtonElements() {
+  return {
+    pause: pauseButton,
+    sound: soundToggle
+  };
+}
+
+function applyHudButtonTuning() {
+  const buttons = getHudButtonElements();
+  for (const key of HUD_BUTTON_KEYS) {
+    const button = buttons[key];
+    const baseline = HUD_BUTTON_BASELINE[key];
+    if (!button || !baseline) continue;
+    button.style.setProperty("--hud-button-x", makeHudScaledOffset(baseline.x));
+    button.style.setProperty("--hud-button-y", makeHudScaledOffset(baseline.y));
+  }
+}
+
 function getVolcanoPlacementForLayout() {
   const layout = phoneLayout ? "phone" : "wide";
   if (!volcanoPlacement[layout]) {
@@ -2413,6 +2706,8 @@ window.addEventListener("blur", clearInputState);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") clearInputState();
 });
+applyHudTextTuning();
+applyHudButtonTuning();
 
 window.addEventListener("keydown", (event) => {
   if (DEBUG_MODE && (event.key === "v" || event.key === "V")) {

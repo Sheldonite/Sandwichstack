@@ -9,6 +9,12 @@
   --tomato: #dc3f35;
   --cheese: #f6c744;
   --shadow: rgba(32, 23, 19, 0.22);
+  --ui-outline: rgba(65, 32, 13, 0.42);
+  --ui-cream: #fff1c7;
+  --ui-gold: #ffd06f;
+  --ui-aqua: #79d8cc;
+  --ui-brown: #4d260f;
+  --game-font: "Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif;
 }
 
 * {
@@ -24,11 +30,13 @@ body {
 body {
   align-items: center;
   background:
+    radial-gradient(circle at 18% 10%, rgba(255, 226, 159, 0.46), transparent 28%),
+    radial-gradient(circle at 88% 18%, rgba(255, 171, 126, 0.22), transparent 28%),
     linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 34%),
     linear-gradient(180deg, var(--sky) 0 58%, var(--sea) 58% 100%);
   color: var(--ink);
   display: flex;
-  font-family: "Trebuchet MS", Arial, sans-serif;
+  font-family: var(--game-font);
   justify-content: center;
   min-height: 100%;
   overscroll-behavior: none;
@@ -46,67 +54,191 @@ body {
 }
 
 .hud {
+  --hud-tune-scale: 1;
   align-items: center;
-  background: var(--panel);
-  border: 3px solid var(--ink);
-  border-radius: 8px;
-  box-shadow: 0 6px 0 var(--shadow);
+  background:
+    linear-gradient(rgba(54, 25, 10, 0.08), rgba(54, 25, 10, 0.08)),
+    url("assets/ui/hud-plank-v3.png?v=1") center / 100% 100% no-repeat;
+  border: 0;
+  border-radius: 10px;
+  filter: drop-shadow(0 7px 0 var(--shadow));
   display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(6, minmax(0, 1fr)) repeat(2, 44px);
-  min-height: 58px;
-  padding: 8px 10px;
+  gap: 7px;
+  grid-template-columns: minmax(150px, 1.75fr) minmax(74px, 0.72fr) minmax(74px, 0.72fr) minmax(80px, 0.78fr) minmax(150px, 1.75fr) minmax(118px, 1.18fr) 48px 48px;
+  min-height: 78px;
+  padding: 16px 30px 15px 76px;
 }
 
 .hud div {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
   min-width: 0;
+  padding: 0 8px 0 2px;
+}
+
+.hud div:first-child {
+  border-left: 0;
 }
 
 .label {
+  color: var(--ui-gold);
   display: block;
-  font-size: clamp(0.72rem, 1.8vw, 0.88rem);
-  font-weight: 800;
+  font-size: clamp(0.62rem, 1.35vw, 0.74rem);
+  font-weight: 900;
   letter-spacing: 0;
+  line-height: 1;
   text-transform: uppercase;
+  text-shadow:
+    0 1px 0 #201713,
+    1px 0 0 #201713,
+    -1px 0 0 #201713,
+    0 -1px 0 #201713;
+  transform: translate(var(--hud-label-x, 0), var(--hud-label-y, 0));
 }
 
 .hud strong {
+  color: var(--ui-cream);
   display: block;
-  font-size: clamp(1rem, 3vw, 1.75rem);
-  line-height: 1;
+  font-size: clamp(0.98rem, 2.65vw, 1.62rem);
+  font-weight: 900;
+  line-height: 0.98;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow:
+    0 2px 0 #201713,
+    1px 0 0 rgba(32, 23, 19, 0.82),
+    -1px 0 0 rgba(32, 23, 19, 0.82),
+    0 5px 0 rgba(0, 0, 0, 0.18);
+  transform: translate(var(--hud-value-x, 0), calc(2px + var(--hud-value-y, 0px)));
   white-space: nowrap;
+}
+
+.hud div:first-of-type strong {
+  font-size: clamp(1.18rem, 3.25vw, 2rem);
+}
+
+.hud div:nth-of-type(2) strong,
+.hud div:nth-of-type(3) strong,
+.hud div:nth-of-type(4) strong,
+.hud div:nth-of-type(5) strong,
+.hud div:nth-of-type(6) strong {
+  font-size: clamp(0.96rem, 2.25vw, 1.42rem);
 }
 
 .icon-button,
 .overlay button {
-  background: var(--cheese);
-  border: 3px solid var(--ink);
-  border-radius: 8px;
-  box-shadow: 0 4px 0 var(--shadow);
-  color: var(--ink);
+  border: 0;
+  border-radius: 10px;
+  filter: drop-shadow(0 5px 0 var(--shadow));
+  color: var(--ui-brown);
   cursor: pointer;
   font: inherit;
   font-weight: 900;
+  text-shadow:
+    0 1px 0 rgba(255, 244, 205, 0.85),
+    0 -1px 0 rgba(77, 34, 12, 0.24);
 }
 
 .icon-button {
+  background: transparent;
   aspect-ratio: 1;
-  font-size: 1.25rem;
-  width: 44px;
+  filter: none;
+  overflow: hidden;
+  position: relative;
+  transform: translate(var(--hud-button-x, 0px), var(--hud-button-y, 0px));
+  width: 48px;
 }
 
-.icon-button:active,
+.icon-button::before,
+.icon-button::after {
+  content: "";
+  display: block;
+  position: absolute;
+}
+
+.pause-icon::before,
+.pause-icon::after {
+  background: #4d260f;
+  border-radius: 2px;
+  box-shadow: 0 1px 0 rgba(255, 241, 199, 0.62);
+  height: 18px;
+  top: 15px;
+  width: 5px;
+}
+
+.pause-icon::before {
+  left: 17px;
+}
+
+.pause-icon::after {
+  right: 17px;
+}
+
+.pause-icon.is-paused::before {
+  background: transparent;
+  border-bottom: 10px solid transparent;
+  border-left: 16px solid #4d260f;
+  border-radius: 0;
+  border-top: 10px solid transparent;
+  box-shadow: none;
+  height: 0;
+  left: 18px;
+  top: 14px;
+  width: 0;
+}
+
+.pause-icon.is-paused::after {
+  display: none;
+}
+
+.sound-icon::before {
+  border-bottom: 10px solid transparent;
+  border-right: 13px solid #4d260f;
+  border-top: 10px solid transparent;
+  height: 0;
+  left: 12px;
+  top: 14px;
+  width: 0;
+}
+
+.sound-icon::after {
+  border: 3px solid #4d260f;
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+  border-top-color: transparent;
+  border-radius: 50%;
+  height: 18px;
+  right: 11px;
+  top: 13px;
+  width: 18px;
+}
+
+.sound-icon.is-muted::after {
+  background: #4d260f;
+  border: 0;
+  border-radius: 2px;
+  height: 4px;
+  right: 11px;
+  top: 22px;
+  transform: rotate(-42deg);
+  width: 22px;
+}
+
+.icon-button:active {
+  transform: translate(var(--hud-button-x, 0px), calc(3px + var(--hud-button-y, 0px)));
+}
+
 .overlay button:active {
-  box-shadow: 0 1px 0 var(--shadow);
+  filter: drop-shadow(0 2px 0 var(--shadow));
   transform: translateY(3px);
 }
 
 canvas {
   aspect-ratio: 3 / 2;
   background: transparent;
-  border: 3px solid var(--ink);
+  border: 3px solid var(--ui-outline);
   border-radius: 8px;
   box-shadow: 0 8px 0 var(--shadow);
   display: block;
@@ -130,33 +262,50 @@ canvas {
 }
 
 .overlay-panel {
-  background: var(--panel);
-  border: 4px solid var(--ink);
-  border-radius: 8px;
-  box-shadow: 0 10px 0 var(--shadow);
-  max-width: 440px;
-  padding: 24px;
+  background: url("assets/ui/overlay-sign.png?v=1") center / 100% 100% no-repeat;
+  border: 0;
+  border-radius: 12px;
+  filter: drop-shadow(0 12px 0 var(--shadow));
+  max-width: 530px;
+  min-height: 398px;
+  padding: 92px 78px 74px;
   pointer-events: auto;
   text-align: center;
 }
 
 .overlay h1 {
+  color: #f29b35;
   font-size: clamp(2.4rem, 9vw, 4.8rem);
+  font-weight: 900;
   line-height: 0.9;
   margin: 0 0 12px;
+  text-shadow:
+    0 2px 0 #7f2c1f,
+    1px 0 0 #7f2c1f,
+    -1px 0 0 #7f2c1f,
+    0 5px 0 rgba(32, 23, 19, 0.2);
 }
 
 .overlay p {
+  color: #5c321a;
   font-size: clamp(1rem, 2.6vw, 1.16rem);
-  font-weight: 700;
+  font-weight: 800;
+  line-height: 1.28;
   margin: 0 0 18px;
+  text-shadow: 0 1px 0 rgba(255, 248, 232, 0.72);
 }
 
 .overlay button {
-  font-size: 1.15rem;
-  min-height: 48px;
-  min-width: 132px;
-  padding: 8px 18px;
+  background: url("assets/ui/button-teal.png?v=1") center / 100% 100% no-repeat;
+  color: var(--ui-cream);
+  font-size: 1.2rem;
+  min-height: 76px;
+  min-width: 220px;
+  padding: 12px 32px 16px;
+  text-shadow:
+    0 2px 0 rgba(32, 23, 19, 0.75),
+    1px 0 0 rgba(32, 23, 19, 0.65),
+    -1px 0 0 rgba(32, 23, 19, 0.65);
 }
 
 @media (max-width: 560px) {
@@ -166,20 +315,76 @@ canvas {
   }
 
   .hud {
-    gap: 6px;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) repeat(2, 38px);
-    min-height: 52px;
-    padding: 6px;
-  }
-
-  .hud div:nth-of-type(4),
-  .hud div:nth-of-type(5),
-  .hud div:nth-of-type(6) {
-    display: none;
+    --hud-tune-scale: 0.5;
+    gap: 3px;
+    grid-template-columns: minmax(0, 1.75fr) minmax(0, 0.72fr) minmax(0, 0.72fr) minmax(0, 0.78fr) minmax(0, 1.75fr) minmax(0, 1.18fr) 30px 30px;
+    min-height: 50px;
+    padding: 10px 11px 10px 37px;
   }
 
   .icon-button {
-    width: 38px;
+    width: 30px;
+  }
+
+  .label {
+    font-size: 0.5rem;
+  }
+
+  .hud strong {
+    font-size: 0.66rem;
+    text-shadow:
+      0 1px 0 #201713,
+      1px 0 0 rgba(32, 23, 19, 0.82),
+      -1px 0 0 rgba(32, 23, 19, 0.82),
+      0 3px 0 rgba(0, 0, 0, 0.16);
+  }
+
+  .hud div:first-of-type strong {
+    font-size: 0.88rem;
+  }
+
+  .hud div:nth-of-type(2) strong,
+  .hud div:nth-of-type(3) strong,
+  .hud div:nth-of-type(4) strong,
+  .hud div:nth-of-type(5) strong,
+  .hud div:nth-of-type(6) strong {
+    font-size: 0.66rem;
+  }
+
+  .pause-icon::before,
+  .pause-icon::after {
+    height: 12px;
+    top: 9px;
+    width: 3px;
+  }
+
+  .pause-icon::before {
+    left: 11px;
+  }
+
+  .pause-icon::after {
+    right: 11px;
+  }
+
+  .sound-icon::before {
+    border-bottom-width: 7px;
+    border-right-width: 10px;
+    border-top-width: 7px;
+    left: 7px;
+    top: 8px;
+  }
+
+  .sound-icon::after {
+    height: 14px;
+    right: 6px;
+    top: 7px;
+    width: 14px;
+  }
+
+  .sound-icon.is-muted::after {
+    right: 6px;
+    top: 15px;
+    width: 18px;
   }
 }
 
@@ -205,31 +410,46 @@ canvas {
   }
 
   .hud {
-    gap: 6px;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) repeat(2, 40px);
+    --hud-tune-scale: 0.5;
+    gap: 3px;
+    grid-template-columns: minmax(0, 1.75fr) minmax(0, 0.72fr) minmax(0, 0.72fr) minmax(0, 0.78fr) minmax(0, 1.75fr) minmax(0, 1.18fr) 30px 30px;
     max-width: 430px;
-    min-height: 52px;
-    padding: 6px;
+    min-height: 50px;
+    padding: 10px 11px 10px 37px;
     width: 100%;
   }
 
-  .hud div:nth-of-type(4),
-  .hud div:nth-of-type(5),
-  .hud div:nth-of-type(6) {
-    display: none;
+  .hud div {
+    padding: 0 2px 0 0;
   }
 
   .label {
-    font-size: 0.72rem;
+    font-size: 0.5rem;
   }
 
   .hud strong {
-    font-size: 1.08rem;
+    font-size: 0.66rem;
+    text-shadow:
+      0 1px 0 #201713,
+      1px 0 0 rgba(32, 23, 19, 0.82),
+      -1px 0 0 rgba(32, 23, 19, 0.82),
+      0 3px 0 rgba(0, 0, 0, 0.16);
+  }
+
+  .hud div:first-of-type strong {
+    font-size: 0.88rem;
+  }
+
+  .hud div:nth-of-type(2) strong,
+  .hud div:nth-of-type(3) strong,
+  .hud div:nth-of-type(4) strong,
+  .hud div:nth-of-type(5) strong,
+  .hud div:nth-of-type(6) strong {
+    font-size: 0.66rem;
   }
 
   .icon-button {
-    font-size: 1rem;
-    width: 40px;
+    width: 30px;
   }
 
   canvas {
@@ -248,7 +468,14 @@ canvas {
 
   .overlay-panel {
     max-width: min(360px, 100%);
-    padding: 18px;
+    min-height: 308px;
+    padding: 68px 45px 52px;
+  }
+
+  .overlay button {
+    min-height: 60px;
+    min-width: 172px;
+    padding: 8px 24px 12px;
   }
 }
 
@@ -259,8 +486,8 @@ canvas {
   }
 
   .hud {
-    min-height: 46px;
-    padding: 5px 8px;
+    min-height: 58px;
+    padding: 12px 24px 11px 56px;
   }
 
   canvas {
