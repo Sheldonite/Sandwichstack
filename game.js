@@ -15,6 +15,11 @@ const soundToggle = document.querySelector("#soundToggle");
 let W = canvas.width;
 let H = canvas.height;
 let phoneLayout = false;
+const mobileSceneCache = {
+  canvas: document.createElement("canvas"),
+  key: "",
+  ready: false
+};
 setCanvasSizeForViewport();
 
 const keys = new Set();
@@ -72,19 +77,19 @@ const IDLE_FRAME_OFFSETS = [
 ];
 const playerSprite = new Image();
 playerSprite.src = "assets/player-spritesheet.png?v=1";
-playerSprite.onload = () => draw();
+playerSprite.onload = handleAssetLoaded;
 const playerIdleSprite = new Image();
 playerIdleSprite.src = "assets/player-idle-spritesheet.png?v=1";
-playerIdleSprite.onload = () => draw();
+playerIdleSprite.onload = handleAssetLoaded;
 const ingredientSprite = new Image();
 ingredientSprite.src = "assets/ingredient-spritesheet.png?v=4";
-ingredientSprite.onload = () => draw();
+ingredientSprite.onload = handleAssetLoaded;
 const hazardPowerSprite = new Image();
 hazardPowerSprite.src = "assets/hazard-power-spritesheet.png?v=1";
-hazardPowerSprite.onload = () => draw();
+hazardPowerSprite.onload = handleAssetLoaded;
 const backgroundImage = new Image();
 backgroundImage.src = `assets/background/volcano-island.png?v=${ASSET_VERSION}`;
-backgroundImage.onload = () => draw();
+backgroundImage.onload = handleAssetLoaded;
 const itemImages = loadNamedImages({
   bread: "assets/items/bread.png",
   lettuce: "assets/items/lettuce.png",
@@ -127,7 +132,7 @@ const UI_ACCENT = "#79d8cc";
 const UI_SHADOW = "rgba(32, 16, 8, 0.7)";
 const ambientImage = new Image();
 ambientImage.src = `assets/ambient/ambient-props.png?v=${ASSET_VERSION}`;
-ambientImage.onload = () => draw();
+ambientImage.onload = handleAssetLoaded;
 const VOLCANO_ANIMATION_SOURCES = {
   wide: {
     smoke: "assets/volcano/smoke-flow-36-premium-spritesheet.png",
@@ -281,11 +286,16 @@ function loadNamedImages(paths) {
   const images = {};
   for (const [name, src] of Object.entries(paths)) {
     const image = new Image();
-    image.onload = () => draw();
+    image.onload = handleAssetLoaded;
     setManagedImageSource(image, src);
     images[name] = image;
   }
   return images;
+}
+
+function handleAssetLoaded() {
+  invalidateSceneCache();
+  draw();
 }
 
 function setManagedImageSource(image, src) {
@@ -920,6 +930,12 @@ function getScreenShake() {
 }
 
 function drawScene() {
+  if (isMobileQualityMode() && backgroundImage.complete && backgroundImage.naturalWidth) {
+    drawMobileCachedScene();
+    if (shouldDrawDynamicBackgroundFx()) drawMobileDynamicAmbient();
+    return;
+  }
+
   if (backgroundImage.complete && backgroundImage.naturalWidth) {
     drawCoverImage(backgroundImage, 0, 0, W, H);
     drawBackgroundMoodWash();
@@ -991,28 +1007,77 @@ function shouldDrawDynamicBackgroundFx() {
   return !phoneLayout || overlay.classList.contains("hidden");
 }
 
+function isMobileQualityMode() {
+  return phoneLayout;
+}
+
+function invalidateSceneCache() {
+  mobileSceneCache.ready = false;
+  mobileSceneCache.key = "";
+}
+
+function drawMobileCachedScene() {
+  const key = getMobileSceneCacheKey();
+  if (!mobileSceneCache.ready || mobileSceneCache.key !== key) {
+    renderMobileSceneCache(key);
+  }
+  ctx.drawImage(mobileSceneCache.canvas, 0, 0, W, H);
+}
+
+function getMobileSceneCacheKey() {
+  const levelIndex = state?.levelIndex ?? 0;
+  const mode = state?.mode || "sandwich";
+  const backgroundReady = backgroundImage.complete && backgroundImage.naturalWidth ? 1 : 0;
+  const ambientReady = ambientImage.complete && ambientImage.naturalWidth ? 1 : 0;
+  return `${W}x${H}:${mode}:${levelIndex}:${backgroundReady}:${ambientReady}`;
+}
+
+function renderMobileSceneCache(key) {
+  const cache = mobileSceneCache.canvas;
+  if (cache.width !== W) cache.width = W;
+  if (cache.height !== H) cache.height = H;
+  const cacheCtx = cache.getContext("2d");
+  cacheCtx.clearRect(0, 0, W, H);
+  if (backgroundImage.complete && backgroundImage.naturalWidth) {
+    drawCoverImageTo(cacheCtx, backgroundImage, 0, 0, W, H);
+    drawBackgroundMoodWashTo(cacheCtx);
+  }
+  drawMobileStaticAmbientTo(cacheCtx);
+  mobileSceneCache.key = key;
+  mobileSceneCache.ready = true;
+}
+
 function drawCoverImage(image, x, y, w, h) {
+  drawCoverImageTo(ctx, image, x, y, w, h);
+}
+
+function drawCoverImageTo(targetCtx, image, x, y, w, h) {
   const scale = Math.max(w / image.naturalWidth, h / image.naturalHeight);
   const sw = w / scale;
   const sh = h / scale;
   const sx = (image.naturalWidth - sw) / 2;
   const sy = (image.naturalHeight - sh) / 2;
-  ctx.drawImage(image, sx, sy, sw, sh, x, y, w, h);
+  targetCtx.drawImage(image, sx, sy, sw, sh, x, y, w, h);
 }
 
 function drawBackgroundMoodWash() {
-  const level = getLevelSettings();
-  ctx.save();
-  ctx.globalCompositeOperation = "screen";
-  ctx.fillStyle = hexToRgba(level.tint, state.mode === "dessert" ? 0.26 : 0.12);
-  ctx.fillRect(0, 0, W, H);
-  ctx.globalCompositeOperation = "multiply";
-  const vignette = ctx.createRadialGradient(W * 0.5, H * 0.42, H * 0.24, W * 0.5, H * 0.46, H * 0.82);
+  drawBackgroundMoodWashTo(ctx);
+}
+
+function drawBackgroundMoodWashTo(targetCtx) {
+  const level = state ? getLevelSettings() : levels[0];
+  const mode = state?.mode || "sandwich";
+  targetCtx.save();
+  targetCtx.globalCompositeOperation = "screen";
+  targetCtx.fillStyle = hexToRgba(level.tint, mode === "dessert" ? 0.26 : 0.12);
+  targetCtx.fillRect(0, 0, W, H);
+  targetCtx.globalCompositeOperation = "multiply";
+  const vignette = targetCtx.createRadialGradient(W * 0.5, H * 0.42, H * 0.24, W * 0.5, H * 0.46, H * 0.82);
   vignette.addColorStop(0, "rgba(255,255,255,0)");
   vignette.addColorStop(1, "rgba(45,28,19,0.18)");
-  ctx.fillStyle = vignette;
-  ctx.fillRect(0, 0, W, H);
-  ctx.restore();
+  targetCtx.fillStyle = vignette;
+  targetCtx.fillRect(0, 0, W, H);
+  targetCtx.restore();
 }
 
 function drawOceanShimmer() {
@@ -1042,14 +1107,45 @@ function drawAmbientMidground() {
   drawTikiTorchesAndSigns();
 }
 
+function drawMobileDynamicAmbient() {
+  if (!ambientImage.complete || !ambientImage.naturalWidth) return;
+  drawBirds();
+  drawDriftingPetals();
+}
+
+function drawMobileStaticAmbientTo(targetCtx) {
+  if (!ambientImage.complete || !ambientImage.naturalWidth) return;
+  const ground = H - 188;
+  const torchScale = 0.26;
+  const signScale = 0.24;
+  const torch = AMBIENT_SPRITES.torches[0];
+  const sign = AMBIENT_SPRITES.signs[0];
+  const torchX = 10;
+  const torchY = ground - torch.h * torchScale;
+  const torchW = torch.w * torchScale;
+  const torchH = torch.h * torchScale;
+  drawAmbientSpriteTo(targetCtx, torch, torchX, torchY, torchW, torchH, { alpha: 0.72 });
+  drawTorchFlameTo(targetCtx, torchX + torchW * 0.5, torchY + torchH * 0.23, torchScale, 0);
+
+  const signW = sign.w * signScale;
+  const signH = sign.h * signScale;
+  drawAmbientSpriteTo(targetCtx, sign, W / 2 - signW / 2, ground - signH + 34, signW, signH, { alpha: 0.7 });
+}
+
 function drawAmbientSprite(rect, x, y, w, h, options = {}) {
-  ctx.save();
-  ctx.globalAlpha *= options.alpha ?? 1;
-  ctx.translate(x + w / 2, y + h / 2);
-  if (options.flipX) ctx.scale(-1, 1);
-  if (options.rotation) ctx.rotate(options.rotation);
-  ctx.drawImage(ambientImage, rect.x, rect.y, rect.w, rect.h, -w / 2, -h / 2, w, h);
-  ctx.restore();
+  drawAmbientSpriteTo(ctx, rect, x, y, w, h, options);
+}
+
+function drawAmbientSpriteTo(targetCtx, rect, x, y, w, h, options = {}) {
+  targetCtx.save();
+  targetCtx.globalAlpha *= options.alpha ?? 1;
+  targetCtx.translate(x + w / 2, y + h / 2);
+  if (options.flipX) targetCtx.scale(-1, 1);
+  if (options.rotation) targetCtx.rotate(options.rotation);
+  targetCtx.imageSmoothingEnabled = true;
+  targetCtx.imageSmoothingQuality = isMobileQualityMode() ? "low" : "high";
+  targetCtx.drawImage(ambientImage, rect.x, rect.y, rect.w, rect.h, -w / 2, -h / 2, w, h);
+  targetCtx.restore();
 }
 
 function drawMovingClouds() {
@@ -1164,12 +1260,16 @@ function drawAnchoredTorch(torch, x, y, scale, index) {
 function drawTorchFlame(anchorX, anchorY, torchScale, index) {
   const frame = phoneLayout ? index % AMBIENT_SPRITES.flames.length : Math.floor(frameNow / 210 + index) % AMBIENT_SPRITES.flames.length;
   const rect = AMBIENT_SPRITES.flames[frame];
+  drawTorchFlameTo(ctx, anchorX, anchorY, torchScale, index, rect);
+}
+
+function drawTorchFlameTo(targetCtx, anchorX, anchorY, torchScale, index, rect = AMBIENT_SPRITES.flames[index % AMBIENT_SPRITES.flames.length]) {
   const tuning = index === 0 ? FLAME_TUNING.left : FLAME_TUNING.right;
   const scale = torchScale * 0.46 * tuning.scale;
   const pulse = phoneLayout ? 1 : 1 + Math.sin(frameNow / 320 + index) * 0.018;
   const w = 134 * scale * pulse;
   const h = 184 * scale * pulse;
-  drawAmbientSprite(rect, anchorX + tuning.x - w / 2, anchorY + tuning.y - h * 0.78, w, h, { alpha: 0.95 });
+  drawAmbientSpriteTo(targetCtx, rect, anchorX + tuning.x - w / 2, anchorY + tuning.y - h * 0.78, w, h, { alpha: 0.95 });
 }
 
 function drawBackgroundVolcanoEffects(erupting) {
@@ -1693,7 +1793,7 @@ function drawCenteredImage(image, x, y, w, h, alpha = 1) {
   ctx.save();
   ctx.globalAlpha *= alpha;
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
+  ctx.imageSmoothingQuality = isMobileQualityMode() ? "low" : "high";
   ctx.drawImage(image, x - w / 2, y - h / 2, w, h);
   ctx.restore();
 }
@@ -1704,7 +1804,7 @@ function drawUiBadgeImage(x, y, w, h, alpha = 1) {
   ctx.save();
   ctx.globalAlpha *= alpha;
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
+  ctx.imageSmoothingQuality = isMobileQualityMode() ? "low" : "high";
   ctx.drawImage(image, x, y, w, h);
   ctx.restore();
   return true;
@@ -1741,7 +1841,7 @@ function drawImageParticle(image, x, y, w, h, rotation = 0, alpha = 1) {
   ctx.translate(x, y);
   ctx.rotate(rotation);
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
+  ctx.imageSmoothingQuality = isMobileQualityMode() ? "low" : "high";
   ctx.drawImage(image, -w / 2, -h / 2, w, h);
   ctx.restore();
 }
@@ -2510,6 +2610,7 @@ function handleViewportResize() {
   const playerRatio = state?.player ? state.player.x / oldW : 0.5;
   setCanvasSizeForViewport();
   ensureVolcanoAnimationImages();
+  invalidateSceneCache();
   if (oldW === W && oldH === H) return;
 
   const xScale = W / oldW;
