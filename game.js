@@ -35,6 +35,8 @@ const HAZARD_POWER_CELL_H = 128;
 const PLAYER_SPRITE_FRAMES = 4;
 const VOLCANO_SMOKE_FRAMES = 36;
 const VOLCANO_ERUPTION_FRAMES = 36;
+const MOBILE_VOLCANO_SMOKE_FRAMES = 18;
+const MOBILE_VOLCANO_ERUPTION_FRAMES = 18;
 const ASSET_VERSION = 2;
 const VOLCANO_PLACEMENT_STORAGE_KEY = "sandwichStackVolcanoPlacementV2";
 const STACK_SCALE = 0.7;
@@ -126,10 +128,17 @@ const UI_SHADOW = "rgba(32, 16, 8, 0.7)";
 const ambientImage = new Image();
 ambientImage.src = `assets/ambient/ambient-props.png?v=${ASSET_VERSION}`;
 ambientImage.onload = () => draw();
-const volcanoAnimationImages = loadNamedImages({
-  smoke: "assets/volcano/smoke-flow-36-premium-spritesheet.png",
-  eruption: "assets/volcano/eruption-36-premium-spritesheet.png"
-});
+const VOLCANO_ANIMATION_SOURCES = {
+  wide: {
+    smoke: "assets/volcano/smoke-flow-36-premium-spritesheet.png",
+    eruption: "assets/volcano/eruption-36-premium-spritesheet.png"
+  },
+  phone: {
+    smoke: "assets/volcano/smoke-flow-18-v2-spritesheet.png",
+    eruption: "assets/volcano/eruption-18-spritesheet.png"
+  }
+};
+const volcanoAnimationImages = loadNamedImages(getVolcanoAnimationSources());
 const AMBIENT_SPRITES = {
   birds: [
     { x: 40, y: 56, w: 258, h: 150 },
@@ -272,11 +281,17 @@ function loadNamedImages(paths) {
   const images = {};
   for (const [name, src] of Object.entries(paths)) {
     const image = new Image();
-    image.src = `${src}?v=${ASSET_VERSION}`;
     image.onload = () => draw();
+    setManagedImageSource(image, src);
     images[name] = image;
   }
   return images;
+}
+
+function setManagedImageSource(image, src) {
+  if (image.dataset?.source === src) return;
+  if (image.dataset) image.dataset.source = src;
+  image.src = `${src}?v=${ASSET_VERSION}`;
 }
 
 const goodItems = [
@@ -908,9 +923,11 @@ function drawScene() {
   if (backgroundImage.complete && backgroundImage.naturalWidth) {
     drawCoverImage(backgroundImage, 0, 0, W, H);
     drawBackgroundMoodWash();
-    drawOceanShimmer();
-    drawBackgroundVolcanoEffects(state.mode === "dessert");
-    drawAmbientMidground();
+    if (shouldDrawDynamicBackgroundFx()) {
+      drawOceanShimmer();
+      drawBackgroundVolcanoEffects(state.mode === "dessert");
+      drawAmbientMidground();
+    }
   } else {
     const gradient = ctx.createLinearGradient(0, 0, 0, H);
     if (state.mode === "dessert") {
@@ -966,8 +983,12 @@ function drawScene() {
     drawPalmLeaf(W - (phoneLayout ? 40 : 70), phoneLayout ? 84 : 64, phoneLayout ? 82 : 98, 3.52, "#2c9a63");
 
     drawBoardwalk(getBoardwalkY());
-    drawAmbientMidground();
+    if (shouldDrawDynamicBackgroundFx()) drawAmbientMidground();
   }
+}
+
+function shouldDrawDynamicBackgroundFx() {
+  return !phoneLayout || overlay.classList.contains("hidden");
 }
 
 function drawCoverImage(image, x, y, w, h) {
@@ -1033,15 +1054,15 @@ function drawAmbientSprite(rect, x, y, w, h, options = {}) {
 
 function drawMovingClouds() {
   const yBase = phoneLayout ? 76 : 56;
-  const cloudScale = phoneLayout ? 0.34 : 0.42;
+  const cloudScale = phoneLayout ? 0.3 : 0.42;
   ctx.save();
-  const cloudIndexes = phoneLayout ? [1, 3] : [0, 2, 3];
+  const cloudIndexes = phoneLayout ? [1] : [0, 2, 3];
   for (let i = 0; i < cloudIndexes.length; i++) {
     const rect = AMBIENT_SPRITES.clouds[cloudIndexes[i]];
     const w = rect.w * cloudScale * (i === 1 ? 0.86 : 1);
     const h = rect.h * cloudScale * (i === 1 ? 0.86 : 1);
     const travel = W + w + 170;
-    const speed = phoneLayout ? 2.8 + i * 0.9 : 3.5 + i * 1.1;
+    const speed = phoneLayout ? 2 : 3.5 + i * 1.1;
     const x = ((frameNow / 1000) * speed + i * 310) % travel - w - 85;
     const y = yBase + (i % 2) * (phoneLayout ? 42 : 32) + Math.sin(frameNow / 3100 + i) * 4;
     drawAmbientSprite(rect, x, y, w, h, { alpha: 0.42 + i * 0.06 });
@@ -1074,8 +1095,8 @@ function drawBirds() {
 function drawDriftingPetals() {
   const top = phoneLayout ? 166 : 136;
   const bottom = phoneLayout ? H - 278 : H - 190;
-  const scale = phoneLayout ? 0.14 : 0.18;
-  const count = phoneLayout ? 4 : 6;
+  const scale = phoneLayout ? 0.12 : 0.18;
+  const count = phoneLayout ? 2 : 6;
   for (let i = 0; i < count; i++) {
     const rect = AMBIENT_SPRITES.petals[i % AMBIENT_SPRITES.petals.length];
     const w = rect.w * scale * (0.72 + (i % 3) * 0.14);
@@ -1092,7 +1113,7 @@ function drawSurfParticles() {
   const surfY = phoneLayout ? H * 0.48 : 318;
   ctx.save();
   ctx.fillStyle = "rgba(255, 248, 232, 0.5)";
-  const count = phoneLayout ? 12 : 18;
+  const count = phoneLayout ? 6 : 18;
   for (let i = 0; i < count; i++) {
     const phase = frameNow / 900 + i * 1.73;
     const x = (i * 67 + frameNow / (54 + (i % 5) * 12)) % (W + 60) - 30;
@@ -1114,14 +1135,14 @@ function drawTikiTorchesAndSigns() {
   const rightTorch = AMBIENT_SPRITES.torches[1];
   const leftSign = AMBIENT_SPRITES.signs[0];
   const rightSign = AMBIENT_SPRITES.signs[1];
-  const torchBob = Math.sin(frameNow / 1400) * 2;
+  const torchBob = phoneLayout ? 0 : Math.sin(frameNow / 1400) * 2;
 
   drawAnchoredTorch(leftTorch, phoneLayout ? 10 : 22, ground - leftTorch.h * torchScale + torchBob, torchScale, 0);
   if (!phoneLayout) {
     drawAnchoredTorch(rightTorch, W - (rightTorch.w * torchScale) - 26, ground - rightTorch.h * torchScale - torchBob, torchScale, 1);
   }
 
-  const sway = Math.sin(frameNow / 1100) * 0.035;
+  const sway = phoneLayout ? 0 : Math.sin(frameNow / 1100) * 0.035;
   if (phoneLayout) {
     const w = leftSign.w * signScale;
     const h = leftSign.h * signScale;
@@ -1135,29 +1156,73 @@ function drawTikiTorchesAndSigns() {
 function drawAnchoredTorch(torch, x, y, scale, index) {
   const w = torch.w * scale;
   const h = torch.h * scale;
-  const rotation = Math.sin(frameNow / (index ? 1700 : 1800) + index * 2) * 0.015;
+  const rotation = phoneLayout ? 0 : Math.sin(frameNow / (index ? 1700 : 1800) + index * 2) * 0.015;
   drawAmbientSprite(torch, x, y, w, h, { alpha: 0.72, rotation });
   drawTorchFlame(x + w * 0.5, y + h * 0.23, scale, index);
 }
 
 function drawTorchFlame(anchorX, anchorY, torchScale, index) {
-  const frame = Math.floor(frameNow / 210 + index) % AMBIENT_SPRITES.flames.length;
+  const frame = phoneLayout ? index % AMBIENT_SPRITES.flames.length : Math.floor(frameNow / 210 + index) % AMBIENT_SPRITES.flames.length;
   const rect = AMBIENT_SPRITES.flames[frame];
   const tuning = index === 0 ? FLAME_TUNING.left : FLAME_TUNING.right;
   const scale = torchScale * 0.46 * tuning.scale;
-  const pulse = 1 + Math.sin(frameNow / 320 + index) * 0.018;
+  const pulse = phoneLayout ? 1 : 1 + Math.sin(frameNow / 320 + index) * 0.018;
   const w = 134 * scale * pulse;
   const h = 184 * scale * pulse;
   drawAmbientSprite(rect, anchorX + tuning.x - w / 2, anchorY + tuning.y - h * 0.78, w, h, { alpha: 0.95 });
 }
 
 function drawBackgroundVolcanoEffects(erupting) {
+  if (phoneLayout) return;
   const vent = getBackgroundVolcanoVent();
+  ensureVolcanoAnimationImages();
+  const smokeImage = volcanoAnimationImages.smoke;
+  const eruptionImage = volcanoAnimationImages.eruption;
   if (erupting) {
-    drawVolcanoAnimationStrip(volcanoAnimationImages.eruption, vent.x, vent.y, vent.eruptionW, vent.eruptionH, VOLCANO_ERUPTION_FRAMES, 7.2, 1, vent.eruptionCropBottom, vent.fadeBottom * 0.65, vent.fadeTop * 0.5);
+    drawVolcanoAnimationStrip(
+      eruptionImage,
+      vent.x,
+      vent.y,
+      vent.eruptionW,
+      vent.eruptionH,
+      getVolcanoFrameCount("eruption"),
+      phoneLayout ? 4.2 : 7.2,
+      1,
+      vent.eruptionCropBottom,
+      phoneLayout ? 0 : vent.fadeBottom * 0.65,
+      phoneLayout ? 0 : vent.fadeTop * 0.5
+    );
   } else {
-    drawVolcanoAnimationStrip(volcanoAnimationImages.smoke, vent.x, vent.y, vent.smokeW, vent.smokeH, VOLCANO_SMOKE_FRAMES, 5.5, 0.9, vent.smokeCropBottom, vent.fadeBottom, vent.fadeTop);
+    drawVolcanoAnimationStrip(
+      smokeImage,
+      vent.x,
+      vent.y,
+      vent.smokeW,
+      vent.smokeH,
+      getVolcanoFrameCount("smoke"),
+      phoneLayout ? 3.2 : 5.5,
+      0.9,
+      vent.smokeCropBottom,
+      phoneLayout ? 0 : vent.fadeBottom,
+      phoneLayout ? 0 : vent.fadeTop
+    );
   }
+}
+
+function getVolcanoAnimationSources() {
+  return phoneLayout ? VOLCANO_ANIMATION_SOURCES.phone : VOLCANO_ANIMATION_SOURCES.wide;
+}
+
+function ensureVolcanoAnimationImages() {
+  const sources = getVolcanoAnimationSources();
+  for (const [name, src] of Object.entries(sources)) {
+    setManagedImageSource(volcanoAnimationImages[name], src);
+  }
+}
+
+function getVolcanoFrameCount(kind) {
+  if (!phoneLayout) return kind === "smoke" ? VOLCANO_SMOKE_FRAMES : VOLCANO_ERUPTION_FRAMES;
+  return kind === "smoke" ? MOBILE_VOLCANO_SMOKE_FRAMES : MOBILE_VOLCANO_ERUPTION_FRAMES;
 }
 
 function getBackgroundVolcanoVent() {
@@ -2444,6 +2509,7 @@ function handleViewportResize() {
   const oldH = H;
   const playerRatio = state?.player ? state.player.x / oldW : 0.5;
   setCanvasSizeForViewport();
+  ensureVolcanoAnimationImages();
   if (oldW === W && oldH === H) return;
 
   const xScale = W / oldW;
