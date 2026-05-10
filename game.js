@@ -9,6 +9,7 @@ const powerStatusEl = document.querySelector("#powerStatus");
 const overlay = document.querySelector("#overlay");
 const overlayText = document.querySelector("#overlayText");
 const startButton = document.querySelector("#startButton");
+const outfitButton = document.querySelector("#outfitButton");
 const pauseButton = document.querySelector("#pauseButton");
 const soundToggle = document.querySelector("#soundToggle");
 
@@ -38,6 +39,8 @@ const HAZARD_POWER_SPRITE_COUNT = 7;
 const HAZARD_POWER_CELL_W = 160;
 const HAZARD_POWER_CELL_H = 128;
 const PLAYER_SPRITE_FRAMES = 4;
+const LEAF_DRESS_UNLOCK_SCORE = 5000;
+const OUTFIT_STORAGE_KEY = "sandwichStackOutfit";
 const VOLCANO_SMOKE_FRAMES = 36;
 const VOLCANO_ERUPTION_FRAMES = 36;
 const MOBILE_VOLCANO_SMOKE_FRAMES = 18;
@@ -75,12 +78,30 @@ const IDLE_FRAME_OFFSETS = [
   { x: 27, y: 0 },
   { x: 28, y: 0 }
 ];
+const LEAF_WALK_FRAME_OFFSETS = [
+  { x: -27, y: 9 },
+  { x: 17, y: 4 },
+  { x: 54, y: 9 },
+  { x: 55, y: 4 }
+];
+const LEAF_IDLE_FRAME_OFFSETS = [
+  { x: -36, y: 10 },
+  { x: 15, y: 9 },
+  { x: 41, y: 10 },
+  { x: 64, y: 9 }
+];
 const playerSprite = new Image();
 playerSprite.src = "assets/player-spritesheet.png?v=1";
 playerSprite.onload = handleAssetLoaded;
 const playerIdleSprite = new Image();
 playerIdleSprite.src = "assets/player-idle-spritesheet.png?v=1";
 playerIdleSprite.onload = handleAssetLoaded;
+const playerLeafSprite = new Image();
+playerLeafSprite.src = "assets/player-leaf-dress-spritesheet.png?v=1";
+playerLeafSprite.onload = handleAssetLoaded;
+const playerLeafIdleSprite = new Image();
+playerLeafIdleSprite.src = "assets/player-leaf-dress-idle-spritesheet.png?v=2";
+playerLeafIdleSprite.onload = handleAssetLoaded;
 const ingredientSprite = new Image();
 ingredientSprite.src = "assets/ingredient-spritesheet.png?v=4";
 ingredientSprite.onload = handleAssetLoaded;
@@ -364,6 +385,17 @@ const dessertItems = [
 let audioCtx;
 let audioUnavailable = false;
 let muted = false;
+const MUSIC_VERSION = 9;
+const musicTracks = typeof Audio !== "undefined" ? [
+  { key: "base", audio: new Audio(`assets/audio/island-arcade-base.wav?v=${MUSIC_VERSION}`), volume: 0.09 },
+  { key: "combo", audio: new Audio(`assets/audio/island-arcade-combo.wav?v=${MUSIC_VERSION}`), volume: 0 },
+  { key: "hype", audio: new Audio(`assets/audio/island-arcade-hype.wav?v=${MUSIC_VERSION}`), volume: 0 }
+] : [];
+for (const track of musicTracks) {
+  track.audio.loop = true;
+  track.audio.preload = "auto";
+  track.audio.volume = track.volume;
+}
 let state = makeState();
 let lastTime = 0;
 let frameNow = 0;
@@ -371,6 +403,7 @@ let animationId = 0;
 let pointerTarget = null;
 let lastBeepTime = -1;
 let highScore = loadHighScore();
+let selectedOutfit = loadSelectedOutfit();
 let volcanoEditMode = false;
 let volcanoDrag = null;
 let volcanoPlacement = loadVolcanoPlacement();
@@ -449,6 +482,8 @@ function startGame() {
   cancelAnimationFrame(animationId);
   animationId = requestAnimationFrame(loop);
   beep(330, 0.06, "triangle", 0.04);
+  resetMusicTracks();
+  syncMusicPlayback();
 }
 
 function endGame() {
@@ -459,7 +494,8 @@ function endGame() {
   overlayText.textContent = `Final score: ${state.score}. Tallest stack: ${state.stack.length}.`;
   startButton.textContent = "Play again";
   overlay.classList.remove("hidden");
-  beep(120, 0.18, "sawtooth", 0.03);
+  playGameOverSfx();
+  syncMusicPlayback();
 }
 
 function loop(now) {
@@ -504,6 +540,7 @@ function update(dt) {
   state.screenShake = Math.max(0, state.screenShake - dt);
   state.comboTimer = Math.max(0, state.comboTimer - dt);
   if (state.comboTimer <= 0) state.combo = 0;
+  updateMusicLayers();
   updateEffects(dt);
   updateLevelProgress();
   updateScorePops(dt);
@@ -624,7 +661,7 @@ function collect(drop) {
       state.message = "Shield saved!";
       state.messageTimer = 1;
       addScorePop("Saved", drop.x, drop.y, "#fff8e8");
-      beep(520, 0.08, "triangle", 0.035, true);
+      playShieldSfx();
       updateHud();
       return;
     }
@@ -633,7 +670,7 @@ function collect(drop) {
     state.combo = 0;
     state.message = "Yuck!";
     state.messageTimer = 0.8;
-    beep(92, 0.12, "square", 0.04);
+    playHazardSfx();
     if (state.lives <= 0) endGame();
   } else if (drop.kind === "power") {
     activatePower(drop.name);
@@ -669,9 +706,9 @@ function collect(drop) {
       state.stack = state.stack.slice(-14);
       state.message = state.mode === "dessert" ? "Layer bonus!" : "Mega stack!";
       state.messageTimer = 1;
-      beep(660, 0.09, "triangle", 0.04);
+      playComboSfx(state.combo, true);
     } else {
-      beep(440 + Math.min(state.stack.length, 16) * 18, 0.04, "sine", 0.025);
+      playCatchSfx(state.combo, cleanCatch);
     }
     const comboBonus = 1 + Math.min(state.combo - 1, 20) * 0.08;
     const modeBonus = state.mode === "dessert" ? 3 : 1;
@@ -736,7 +773,7 @@ function updateLevelProgress() {
   state.levelToastTimer = 2.2;
   state.screenShake = Math.max(state.screenShake, 0.16);
   addScorePop(levels[nextLevel].name, W / 2, 88, levels[nextLevel].tint);
-  beep(520 + nextLevel * 55, 0.08, "triangle", 0.035, true);
+  playLevelSfx(nextLevel);
 }
 
 function activatePower(name) {
@@ -750,7 +787,7 @@ function activatePower(name) {
   state.message = powerItems.find((item) => item.name === name)?.label || "Power";
   state.messageTimer = 1;
   addScorePop(state.message, state.player.x, state.player.y - 120, "#ffd84c");
-  beep(760, 0.08, "triangle", 0.04, true);
+  playPowerSfx();
   updateHud();
 }
 
@@ -827,7 +864,7 @@ function triggerDessertRound() {
   state.message = "";
   state.messageTimer = 0;
   updateHud();
-  beep(659, 0.1, "triangle", 0.035, true);
+  playDessertSfx(true);
 }
 
 function getNextDessertGap() {
@@ -846,7 +883,7 @@ function finishDessertRound() {
   state.message = `Sugar rush +${state.dessertScore}`;
   state.messageTimer = 1.5;
   updateHud();
-  beep(720, 0.08, "triangle", 0.035);
+  playDessertSfx(false);
 }
 
 function updateHud() {
@@ -863,6 +900,7 @@ function updateHud() {
   soundToggle.classList.toggle("is-muted", muted);
   soundToggle.setAttribute("aria-label", muted ? "Turn sound on" : "Turn sound off");
   soundToggle.setAttribute("title", muted ? "Turn sound on" : "Turn sound off");
+  updateOutfitButton();
 }
 
 function makeGoal(index) {
@@ -1662,26 +1700,27 @@ function drawPlayer() {
 
 function isCurrentPlayerSpriteReady(vx) {
   const walking = Math.abs(vx) > 30;
-  const sprite = walking ? playerSprite : playerIdleSprite;
+  const { walk, idle: idleSprite } = getPlayerOutfitSprites();
+  const sprite = walking ? walk : idleSprite;
   return sprite.complete && sprite.naturalWidth;
 }
 
 function drawPlayerSprite(plateX, plateY, vx, facing) {
   const walking = Math.abs(vx) > 30;
-  const sprite = walking ? playerSprite : playerIdleSprite;
+  const { walk, idle: idleSprite } = getPlayerOutfitSprites();
+  const sprite = walking ? walk : idleSprite;
   if (!sprite.complete || !sprite.naturalWidth) return;
 
   const frameW = sprite.naturalWidth / PLAYER_SPRITE_FRAMES;
   const frameH = sprite.naturalHeight;
   const frame = walking ? Math.floor(frameNow / 110) % PLAYER_SPRITE_FRAMES : Math.floor(frameNow / 260) % PLAYER_SPRITE_FRAMES;
-  const frameOffset = walking ? WALK_FRAME_OFFSETS[frame] : IDLE_FRAME_OFFSETS[frame];
+  const frameOffset = getPlayerFrameOffset(walking, frame);
   const spriteScale = 248 / frameH;
   const spriteH = 248;
   const spriteW = spriteH * (frameW / frameH);
   const plateAnchorX = spriteW * 0.72;
   const plateAnchorY = spriteH * 0.43;
-  const idle = Math.sin(frameNow / 520);
-  const bob = walking ? Math.sin(frameNow / 110) * 2 : idle * 2;
+  const bob = 0;
   const breathe = 1;
 
   ctx.save();
@@ -1796,6 +1835,20 @@ function drawCenteredImage(image, x, y, w, h, alpha = 1) {
   ctx.imageSmoothingQuality = isMobileQualityMode() ? "low" : "high";
   ctx.drawImage(image, x - w / 2, y - h / 2, w, h);
   ctx.restore();
+}
+
+function getPlayerOutfitSprites() {
+  if (selectedOutfit === "leaf" && isLeafDressUnlocked()) {
+    return { walk: playerLeafSprite, idle: playerLeafIdleSprite };
+  }
+  return { walk: playerSprite, idle: playerIdleSprite };
+}
+
+function getPlayerFrameOffset(walking, frame) {
+  if (selectedOutfit === "leaf" && isLeafDressUnlocked()) {
+    return walking ? LEAF_WALK_FRAME_OFFSETS[frame] : LEAF_IDLE_FRAME_OFFSETS[frame];
+  }
+  return walking ? WALK_FRAME_OFFSETS[frame] : IDLE_FRAME_OFFSETS[frame];
 }
 
 function drawUiBadgeImage(x, y, w, h, alpha = 1) {
@@ -2563,6 +2616,7 @@ function beep(freq, duration, type, gainValue, force) {
     audioUnavailable = true;
     muted = true;
     updateHud();
+    syncMusicPlayback();
     return;
   }
 
@@ -2583,6 +2637,142 @@ function beep(freq, duration, type, gainValue, force) {
     audioUnavailable = true;
     muted = true;
     updateHud();
+    syncMusicPlayback();
+  }
+}
+
+function playCatchSfx(combo, cleanCatch) {
+  playPercussiveTone(cleanCatch ? 690 : 520, 0.055, "triangle", cleanCatch ? 0.038 : 0.026);
+  playPercussiveTone(cleanCatch ? 310 : 240, 0.045, "square", 0.014, -0.008);
+  if (cleanCatch) {
+    playPercussiveTone(1035, 0.07, "sine", 0.018, 0.035);
+  }
+  if (combo === 5 || combo === 10 || combo === 15 || combo % 20 === 0) {
+    playComboSfx(combo, false);
+  }
+}
+
+function playComboSfx(combo, big) {
+  const root = 520 + Math.min(combo, 24) * 9;
+  playPercussiveTone(root, 0.06, "triangle", 0.032, 0);
+  playPercussiveTone(root * 1.25, 0.055, "triangle", 0.028, 0.045);
+  playPercussiveTone(root * 1.5, big ? 0.11 : 0.07, "sine", big ? 0.034 : 0.022, 0.09);
+  playNoiseTick(big ? 0.08 : 0.045, big ? 0.032 : 0.020);
+}
+
+function playPowerSfx() {
+  playPercussiveTone(760, 0.08, "triangle", 0.04, 0);
+  playPercussiveTone(1140, 0.09, "sine", 0.024, 0.055);
+  playNoiseTick(0.05, 0.026);
+}
+
+function playShieldSfx() {
+  playPercussiveTone(520, 0.08, "triangle", 0.035, 0);
+  playPercussiveTone(260, 0.05, "square", 0.018, 0.035);
+  playNoiseTick(0.04, 0.018);
+}
+
+function playHazardSfx() {
+  playPercussiveTone(155, 0.08, "square", 0.030, 0);
+  playPercussiveTone(92, 0.12, "sawtooth", 0.022, 0.035);
+}
+
+function playLevelSfx(levelIndex) {
+  const root = 500 + levelIndex * 40;
+  playPercussiveTone(root, 0.07, "triangle", 0.03, 0);
+  playPercussiveTone(root * 1.33, 0.07, "triangle", 0.03, 0.06);
+  playPercussiveTone(root * 1.75, 0.12, "sine", 0.026, 0.12);
+  playNoiseTick(0.075, 0.030);
+}
+
+function playDessertSfx(starting) {
+  if (starting) {
+    playPercussiveTone(659, 0.1, "triangle", 0.035, 0);
+    playPercussiveTone(988, 0.11, "sine", 0.025, 0.075);
+  } else {
+    playPercussiveTone(720, 0.08, "triangle", 0.035, 0);
+    playPercussiveTone(540, 0.09, "triangle", 0.022, 0.055);
+  }
+}
+
+function playGameOverSfx() {
+  playPercussiveTone(180, 0.10, "triangle", 0.026, 0);
+  playPercussiveTone(120, 0.18, "sawtooth", 0.024, 0.07);
+}
+
+function playPercussiveTone(freq, duration, type, gainValue, delay = 0) {
+  if (muted || audioUnavailable) return;
+  window.setTimeout(() => beep(freq, duration, type, gainValue, true), Math.max(0, delay * 1000));
+}
+
+function playNoiseTick(duration, gainValue) {
+  if (muted || audioUnavailable) return;
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) return;
+  try {
+    audioCtx = audioCtx || new AudioContextCtor();
+    const sampleCount = Math.max(1, Math.floor(audioCtx.sampleRate * duration));
+    const buffer = audioCtx.createBuffer(1, sampleCount, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < sampleCount; i++) {
+      const t = i / sampleCount;
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 3);
+    }
+    const source = audioCtx.createBufferSource();
+    const filter = audioCtx.createBiquadFilter();
+    const gain = audioCtx.createGain();
+    filter.type = "bandpass";
+    filter.frequency.value = 1500;
+    filter.Q.value = 2.8;
+    gain.gain.setValueAtTime(gainValue, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    source.connect(filter).connect(gain).connect(audioCtx.destination);
+    source.start();
+  } catch {
+    audioUnavailable = true;
+    muted = true;
+    updateHud();
+    syncMusicPlayback();
+  }
+}
+
+function syncMusicPlayback() {
+  if (!musicTracks.length) return;
+  updateMusicLayers();
+  if (muted || audioUnavailable || !state.running || state.paused || state.over) {
+    for (const track of musicTracks) track.audio.pause();
+    return;
+  }
+
+  for (const track of musicTracks) {
+    const playAttempt = track.audio.play();
+    if (playAttempt?.catch) playAttempt.catch(() => {});
+  }
+}
+
+function updateMusicLayers() {
+  if (!musicTracks.length) return;
+  const combo = state?.combo || 0;
+  const targets = {
+    base: muted || audioUnavailable ? 0 : 0.0875,
+    combo: muted || audioUnavailable ? 0 : clamp((combo - 5) / 10, 0, 1) * 0.056,
+    hype: muted || audioUnavailable ? 0 : clamp((combo - 15) / 12, 0, 1) * 0.0455
+  };
+  for (const track of musicTracks) {
+    track.volume += (targets[track.key] - track.volume) * 0.08;
+    track.audio.volume = track.volume;
+  }
+}
+
+function resetMusicTracks() {
+  for (const track of musicTracks) {
+    try {
+      track.audio.currentTime = 0;
+      track.volume = track.key === "base" ? 0.0875 : 0;
+      track.audio.volume = track.volume;
+    } catch {
+      // Some browsers reject currentTime changes before metadata is ready.
+    }
   }
 }
 
@@ -2704,6 +2894,50 @@ function loadHighScore() {
   }
 }
 
+function loadSelectedOutfit() {
+  try {
+    return localStorage.getItem(OUTFIT_STORAGE_KEY) === "leaf" ? "leaf" : "classic";
+  } catch {
+    return "classic";
+  }
+}
+
+function saveSelectedOutfit() {
+  try {
+    localStorage.setItem(OUTFIT_STORAGE_KEY, selectedOutfit);
+  } catch {
+    // Outfit selection is optional local polish.
+  }
+}
+
+function isLeafDressUnlocked() {
+  return highScore >= LEAF_DRESS_UNLOCK_SCORE;
+}
+
+function updateOutfitButton() {
+  if (!outfitButton) return;
+  const unlocked = isLeafDressUnlocked();
+  if (!unlocked && selectedOutfit === "leaf") selectedOutfit = "classic";
+  outfitButton.classList.toggle("is-locked", !unlocked);
+  outfitButton.disabled = false;
+  outfitButton.textContent = unlocked
+    ? `Outfit: ${selectedOutfit === "leaf" ? "Leaf Dress" : "Classic"}`
+    : `Leaf Dress unlocks at ${LEAF_DRESS_UNLOCK_SCORE.toLocaleString()}`;
+  outfitButton.setAttribute("aria-label", unlocked ? "Toggle player outfit" : `Leaf dress unlocks at ${LEAF_DRESS_UNLOCK_SCORE} points`);
+  outfitButton.setAttribute("title", unlocked ? "Toggle player outfit" : `Reach ${LEAF_DRESS_UNLOCK_SCORE.toLocaleString()} high score to unlock`);
+}
+
+function toggleOutfit() {
+  if (!isLeafDressUnlocked()) {
+    updateOutfitButton();
+    return;
+  }
+  selectedOutfit = selectedOutfit === "leaf" ? "classic" : "leaf";
+  saveSelectedOutfit();
+  updateOutfitButton();
+  draw();
+}
+
 function saveHighScore() {
   if (state.score <= highScore) return;
   highScore = state.score;
@@ -2712,6 +2946,7 @@ function saveHighScore() {
   } catch {
     // Browser storage can be unavailable in some embedded contexts.
   }
+  updateOutfitButton();
 }
 
 function loadVolcanoPlacement() {
@@ -2850,19 +3085,23 @@ function togglePause() {
   state.paused = !state.paused;
   lastTime = performance.now();
   updateHud();
+  syncMusicPlayback();
   draw();
 }
 
 startButton.addEventListener("click", startGame);
+if (outfitButton) outfitButton.addEventListener("click", toggleOutfit);
 pauseButton.addEventListener("click", togglePause);
 soundToggle.addEventListener("click", () => {
   if (audioUnavailable) {
     muted = true;
     updateHud();
+    syncMusicPlayback();
     return;
   }
   muted = !muted;
   updateHud();
+  syncMusicPlayback();
 });
 window.addEventListener("resize", handleViewportResize);
 window.addEventListener("orientationchange", () => {

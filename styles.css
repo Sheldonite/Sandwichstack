@@ -308,6 +308,23 @@ canvas {
     -1px 0 0 rgba(32, 23, 19, 0.65);
 }
 
+.overlay .outfit-button {
+  background-image: url("assets/ui/button-gold.png?v=1");
+  color: var(--ui-brown);
+  display: block;
+  font-size: 0.92rem;
+  margin: 0 auto 8px;
+  min-height: 48px;
+  min-width: 190px;
+  padding: 7px 22px 11px;
+  text-shadow: 0 1px 0 rgba(255, 237, 171, 0.65);
+}
+
+.overlay .outfit-button.is-locked {
+  filter: grayscale(0.35) drop-shadow(0 5px 0 var(--shadow));
+  opacity: 0.82;
+}
+
 @media (max-width: 560px) {
   .game-shell {
     gap: 8px;
@@ -582,6 +599,13 @@ canvas {
     min-height: 60px;
     min-width: 172px;
     padding: 8px 24px 12px;
+  }
+
+  .overlay .outfit-button {
+    font-size: 0.78rem;
+    min-height: 42px;
+    min-width: 158px;
+    padding: 5px 18px 9px;
   }
 }
 
